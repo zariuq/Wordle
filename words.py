@@ -233,104 +233,11 @@ if False:
                         f.write("    %s %s %s %s %s\n" % word_list)
                     f.write("\n\n")
 
-# Now I want to check if a word is pinpointed by, say, the following solution. 
-# For the goal, I want to see what hints would be generated, first.
+# The following code is to check if a good quntiple of words solves every single target.
+# I've included the few functions it uses a bit out of place just in case you want to try running it :- p
 
-solution = ('glent', 'jumby', 'prick', 'vozhd', 'waqfs')
-goal = 'robot' #'savoy'
-
-# The idea was to keep track of the hints in two arrasy that actually contain the relevant letters.
-# That way I wouldn't need to store the associated words . . ..
-# Using a numpy array is also deprecated (tho 3b1b got it working by using one array for the full matrix of hints!) 
-def get_hints(word, goal):
-    yellow_hints = [0,0,0,0,0]
-    green_hints  = [0,0,0,0,0]
-    #hints = np.zeros([2,5])#[0,0,0,0,0]
-    for i in range(0,5):
-        letter = word[i]
-        if letter == goal[i]:
-            green_hints[i] = letter
-            #hints[0, i] = letter
-        elif letter in goal:
-            yellow_hints[i] = letter
-            #hints[1, i] = letter
-    return [green_hints, yellow_hints]
-
-def all_hints(solution, goals):
-    green_hints  = [""]*5
-    yellow_hints = [""]*5
-    for word in solution:
-        for i in range(0,5):
-            letter = word[i]
-            if letter == goal[i]:
-                green_hints[i] = letter
-            elif letter in goal:
-                yellow_hints[i] = letter
-    return [green_hints, yellow_hints]
-
-hints = all_hints(solution, goal)
-green_hints = hints[0]
-yellow_hints = hints[1]
-
-#Green:  [['', 'a', '', '', 'y'], 
-#Yellow:  ['v', 'o', '', '', 's']
-
-# Now I want all words with word[1] = 'a' and word[4] = 'y'
-
-# a2 = list(filter(lambda word : word[1] == 'a', words))
-# a2y4 = list(filter(lambda word : word[4] == 'y', a2))
-# Hehe, from 12972 to 2263 to 246 options.
-
-# Then I want to filter out words that don't include 'v', 'o,' and 's'.
-#>>> a2y4hints = list(filter(lambda word : 'v' in word and 'o' in word and 's' in word, a2y4))
-#>>> a2y4hints
-#['savoy']
-
-def filter_greens(green_hints, possible_words):
-    for index in range(5):
-        letter = green_hints[index]
-        #print(f"{letter} @ {index}")
-        if letter:
-            possible_words = list(filter(lambda word : word[index] == letter, possible_words))
-    return possible_words
-
-def filter_yellows(yellow_hints, possible_words):
-    yellow_hints = list(filter(None, yellow_hints))
-    possible_words = list(filter(lambda word : all(letter in word for letter in yellow_hints), possible_words))
-    return possible_words
-
-def filter_yellow_positions(yellow_hints, possible_words):
-    for index in range(5):
-        letter = yellow_hints[index]
-        if letter:
-            possible_words = list(filter(lambda word : word[index] != letter, possible_words))
-    return possible_words
-
-def filter_yellow_combine(yellow_hints, possible_words):
-    possible_words = filter_yellows(yellow_hints, possible_words)
-    return filter_yellow_positions(yellow_hints, possible_words)
-
-def filter_hints_gy(hints, possible_words):
-    possible_words = filter_greens(hints[0], possible_words)
-    return filter_yellow_combine(hints[1], possible_words)
-
-def filter_word_by_goal(word, goal, possible_words):
-    hints = get_hints(word, goal)
-    return filter_hints_gy(hints, possible_words)
-
-# Also... I forgot to use the information provided by a word NOT being a hint.  Aha!  Maybe that's a trick.  Shit.  So naive.
-def filter_word_by_goal2(word, goal, possible_words):
-    for index in range(0,5):
-        letter = word[index]
-        if letter == goal[index]: # Keep words where greens match
-            possible_words = list(filter(lambda word : word[index] == letter, possible_words))
-        elif letter in goal: # 1) Filter out words with yellow in matching index and 2) Keep words with the yellow letter elsewhere 
-            possible_words = list(filter(lambda word : word[index] != letter, possible_words))
-            possible_words = list(filter(lambda word : letter in word, possible_words))
-        else: # Remove all words containing grey letters.
-            possible_words = list(filter(lambda word : letter not in word, possible_words))
-    return possible_words
-
+# Given a word and a goal, filter the list of possible words according to what the hint would be.
+# Note that it may not treat yellow letters correctly in the case that there are 2+ in a word.  (Fixed later, at least.)
 def filter_word_by_goal2(word, goal, possible_words):
     for index in range(0,5):
         letter = word[index]
@@ -338,12 +245,61 @@ def filter_word_by_goal2(word, goal, possible_words):
             possible_words = list(filter(lambda word : word[index] == letter, possible_words))
         elif letter in goal: # 1) Filter out words with yellow in matching index and 2) Keep words with the yellow letter elsewhere 
             possible_words = list(filter(lambda word : (word[index] != letter) and (letter in word), possible_words))
-            #possible_words = list(filter(lambda word : letter in word, possible_words))
         else: # Remove all words containing grey letters.
             possible_words = list(filter(lambda word : letter not in word, possible_words))
     return possible_words
 
-# Wow!  4-5 seconds faster!  
+# Takes a list of words, possible words, and a goal for hint generation.
+# Returns the words that have not yet been ruled out (ideally only the goal).
+def filter_solution_by_goal(solution, goal, possible_words):
+    for word in solution:
+        possible_words = filter_word_by_goal2(word, goal, possible_words)
+    return possible_words
+
+if False:
+    broken = []
+    winners = []
+    stats = []
+    killers = Counter() 
+    total = len(words)
+    possible_solutions = [solution for wordset in best_quintuples_unique_dict.values() for solution in wordset]
+    for solution in possible_solutions:
+        solved = 0
+        failed = 0
+        options_left = 0
+        wtf = [] ## It's empty. -- debugging variable
+        success = True
+        for goal in words:
+            possible_words = filter_solution_by_goal(solution, goal, words)
+            num_possible_words = len(possible_words)
+            if num_possible_words == 1:
+                if possible_words[0] == goal:
+                    solved = solved + 1
+                    options_left = options_left +  1
+                else: # Just making sure ;D
+                    wtf.append(goal)
+                    print(f"{goal} is not {yellow_filtered_words[0]}!")
+            else:
+                killers[goal] = killers[goal] + 1
+                failed = failed + 1
+                options_left = options_left + num_possible_words
+                if success:
+                    broken.append((solution, goal, possible_words))
+                    print(f"{goal} breaks {solution} with {num_possible_words} possibilities.")
+                    success = False
+        if success:
+            winners.append(solution)
+            print(f"{solution} is victorious!")
+        winrate = solved / total
+        options_left = options_left / total
+        print(f"{solution} has winrate {winrate} with {solved} solved and {failed} failures with on average {options_left} remaining possible words.")
+        stats.append((solved, failed, winrate, options_left, solution))
+
+###
+#  Next up is code for dealing with Wordle in more general terms. 
+###
+
+# Wow!  4-5 seconds faster with possible_words=words!  
 def filter_word_by_goal3(word, goal, possible_words):
     filters = []
     for index in range(0,5):
@@ -363,38 +319,10 @@ def filter_word_by_goal3(word, goal, possible_words):
             possible_words = list(filter(lambda word : letter not in word, possible_words))
     return possible_words
 
-def get_hints2(word, goal):
-    hints = []
-    for index in range(0,5):
-        letter = word[index]
-        if letter == goal[index]: 
-            hints.append('g')
-        elif letter in goal: 
-            hints.append('y')
-        else: 
-            hints.append('b')
-    return hints
-
-def get_hints3_old(word, goal):
-    hints = ''
-    for index in range(0,5):
-        letter = word[index]
-        if letter == goal[index]: 
-            hints += 'g'
-        elif letter in goal: 
-            hints += 'y'
-        else: 
-            hints += 'b'
-    return hints
-
-#>>> get_hints3('topos', 'mount')
-#'ygbyb' -- should be ygbbb
-#>>> get_hints3('moons', 'mount')
-#'ggygb' -- should be ggbgb
-#>>> get_hints3('torot', 'mount')
-#'ygbyg' -- should be bgbbg
+# Turns out it's more important to work with hints directly.
+# Focus on the information.
+# And the exact scheme Wordle uses for hints is a bit confusing (which I figured out via trial and error xD)
 # If you over-guess a letter, you'll only receive hints for the number of the letter in the word.
-
 def get_hints3(word, goal):
     hints = ['', '', '', '', '']
     letter_counts = Counter(goal)
@@ -413,15 +341,18 @@ def get_hints3(word, goal):
                 hints[index] = 'b'
     return "".join(hints)
 
+# I tried mapping hints to ints in a way that seemed similar to 3b1b
+# But it is a bit slower, so not worth it if I don't actually use the matrices intelligently.
+#hintarr = np.load("hintarr.npy")
+color_to_int = {'g' : 2, 'y' : 1, 'b': 0}
+int_to_color = {2: 'g', 1 : 'y', 0: 'b'}
+
 def hint_to_int(c):
     if c == 'g':
         return 2
     if c == 'y':
         return 1
     return 0
-
-color_to_int = {'g' : 2, 'y' : 1, 'b': 0}
-int_to_color = {2: 'g', 1 : 'y', 0: 'b'}
 
 def get_hints4(word, goal):
     hint = get_hints3(word,goal)
@@ -434,8 +365,6 @@ def int_to_hint(i):
         i = i // 3
     return "".join(hints)
 
-#hintarr = np.load("hintarr.npy")
-
 def get_hints5(word, goal):
     return int_to_hint(hintarr[worddic[word]][worddic[goal]])
 
@@ -444,105 +373,18 @@ def get_hints5(word, goal):
 #>>> start = time.time(); len([get_hints3(w, 'pause') for w in words]); end = time.time(); print(f"{end - start}")
 #0.08193016052246094
 
-# Format is hints[0] is green hints and hints[1]  is yellow hinst.
-def filter_word_by_hints_broken(word, hints, possible_words):
-    for index in range(0,5):
-        letter = word[index]
-        if hints[index] == 'g':
-            possible_words = list(filter(lambda word : word[index] == letter, possible_words))
-        elif hints[index] == 'y':
-            possible_words = list(filter(lambda word : word[index] != letter, possible_words))
-            possible_words = list(filter(lambda word : letter in word, possible_words))
-        else:
-            possible_words = list(filter(lambda word : letter not in word, possible_words))
-    return possible_words
+# Some hacky ideas I had that didn't quite survive the test of time:
+# Also functions superceded 
+#def filter_word_by_hints(word, received_hint, possible_words):
+#def get_different_word(word, hints, possible_words):
+#def get_different_wordset(word, hints, possible_words):
+#def obtain_word_possibilities(word, possible_words):
+#def calculate_word_possibilities3(word, possible_words):
+#def calculate_pair_possibilities3(word1, word2, possible_words):
 
-def filter_word_by_hints(word, received_hint, possible_words):
-    remaining_words = []
-    for goal in possible_words:
-        hint = get_hints3(word, goal)
-        if hint == received_hint:
-            remaining_words.append(goal)
-    return remaining_words
-     
-# Guessing a green letter in the same position gets zero new information
-# Same for guessing a yellow in the same position again.  But I may want to guess a word w/o the yellow letter.
-# and grey clues can just be gotten rid of!
-def get_different_word(word, hints, possible_words):
-    for index in range(0,5):
-        letter = word[index]
-        if hints[index] == 'g' or hints[index] == 'y':
-            possible_words = list(filter(lambda word : word[index] != letter, possible_words))
-        else:
-            possible_words = list(filter(lambda word : letter not in word, possible_words))
-    return possible_words
-
-def get_different_wordset(word, hints, possible_words):
-    for index in range(0,5):
-        letter = word[index]
-        if hints[index] == 'g' or hints[index] == 'y':
-            possible_words = set(filter(lambda word : word[index] != letter, possible_words))
-        else:
-            possible_words = set(filter(lambda word : letter not in word, possible_words))
-    return possible_words
-
-# Okay, taking grey letters into account, cigar no longer breaks it.
-def filter_solution_by_goal(solution, goal, possible_words):
-    for word in solution:
-        possible_words = filter_word_by_goal2(word, goal, possible_words)
-        #print(len(possible_words))
-    return possible_words
-
-def obtain_word_possibilities(word, possible_words):
-   accumulator = 0
-   filtered_possibilities = []
-   for goal in possible_words:
-       tmp = filter_word_by_goal(word, goal, possible_words)
-       #l = len(tmp)
-       accumulator += l
-       filtered_possibilities.append((goal, l, tmp))
-   return (accumulator / num_words, filtered_possibilities) 
-
-def calculate_word_possibilities(word, possible_words):
-   accumulator = 0
-   for goal in possible_words:
-       tmp = filter_word_by_goal(word, goal, possible_words)
-       l = len(tmp)
-       accumulator += l
-   return accumulator / num_words 
-
-def calculate_word_possibilities2(word, possible_words):
-   accumulator = 0
-   for goal in possible_words:
-       tmp = filter_word_by_goal2(word, goal, possible_words)
-       l = len(tmp)
-       accumulator += l
-   return accumulator / len(possible_words) 
-
-def calculate_word_possibilities3(word, possible_words):
-   accumulator = 0
-   for goal in possible_words:
-       tmp = filter_word_by_goal3(word, goal, possible_words)
-       l = len(tmp)
-       accumulator += l
-   return accumulator / len(possible_words) 
-
-def calculate_pair_possibilities2(word1, word2, possible_words):
-    accumulator = 0
-    for goal in possible_words:
-        tmp = filter_word_by_goal2(word1, goal, possible_words)
-        tmp = filter_word_by_goal2(word2, goal, tmp)
-        accumulator += len(tmp)
-    return accumulator / len(possible_words)
-
-def calculate_pair_possibilities3(word1, word2, possible_words):
-    accumulator = 0
-    for goal in possible_words:
-        tmp = filter_word_by_goal3(word1, goal, possible_words)
-        tmp = filter_word_by_goal3(word2, goal, tmp)
-        accumulator += len(tmp)
-    return accumulator / len(possible_words)
-
+# Deprecated.  
+# Finds the worst-case hint-bucket (and computes this for EACH goal in the bucket).
+# Also computes the average or expected hint-bucket size.
 def locate_word_possibilities(word1, possible_words):
     accumulator = 0
     worst = 0
@@ -552,140 +394,18 @@ def locate_word_possibilities(word1, possible_words):
         worst = max(worst, l) 
     return worst, accumulator / len(possible_words)
 
-def locate_pair_possibilities(word1, word2, possible_words):
-    accumulator = 0
-    worst = 0
-    for goal in possible_words:
-        tmp = filter_word_by_goal3(word1, goal, possible_words)
-        tmp = filter_word_by_goal3(word2, goal, tmp)
-        l = len(tmp)
-        accumulator += l
-        worst = max(worst, l) 
-    return worst, accumulator / len(possible_words)
-
+# A score function adapted from https://github.com/Ermine516/GenericWordleSolvability 
 dscores = {'g' : 2, 'y' : 1, 'b' :0}
 
 def dscore(hints):
     return 1 + (10 - (dscores[hints[0]] + dscores[hints[1]] + dscores[hints[2]] + dscores[hints[3]] + dscores[hints[4]])) / 100
 
-def dscore2(hints):
-    return 10 - (dscores[hints[0]] + dscores[hints[1]] + dscores[hints[2]] + dscores[hints[3]] + dscores[hints[4]])
+#def calculate_word_possibilities3_with_dscore(word, possible_words):
+#def calculate_pair_possibilities3_with_dscore(word1, word2, possible_words):
 
-def calculate_word_possibilities2_with_dscore(word, possible_words):
-   accumulator = 0
-   for goal in possible_words:
-       tmp = filter_word_by_goal2(word, goal, possible_words)
-       l = len(tmp)
-       accumulator += l * dscore(get_hints2(word, goal))
-   return accumulator / len(possible_words) 
-
-def calculate_pair_possibilities2_with_dscore(word1, word2, possible_words):
-    accumulator = 0
-    dacc = 0
-    for goal in possible_words:
-        tmp = filter_word_by_goal2(word1, goal, possible_words)
-        tmp = filter_word_by_goal2(word2, goal, tmp)
-        accumulator += len(tmp)     
-        dacc += (dscore(get_hints2(word1, goal)) + dscore(get_hints2(word2, goal)))
-    return (accumulator * dacc) / len(possible_words)**2
-
-def calculate_word_possibilities3_with_dscore(word, possible_words):
-   accumulator = 0
-   dacc = 0
-   for goal in possible_words:
-       tmp = filter_word_by_goal3(word, goal, possible_words)
-       accumulator += len(tmp) 
-       dacc += dscore(get_hints2(word, goal))
-   return (accumulator * dacc) / len(possible_words)**2
-
-def calculate_pair_possibilities3_with_dscore(word1, word2, possible_words):
-    accumulator = 0
-    dacc = 0
-    for goal in possible_words:
-        tmp = filter_word_by_goal3(word1, goal, possible_words)
-        tmp = filter_word_by_goal3(word2, goal, tmp)
-        accumulator += len(tmp)     
-        dacc += (dscore(get_hints2(word1, goal)) + dscore(get_hints2(word2, goal)))
-    return (accumulator * dacc) / len(possible_words)**2
-
-'''
-word_rankings = []
-word_rankings2 = []
-for i in range(5490, len(words), 1):
-    word = words[i]
-    power = calculate_word_possibilities3(word, words)
-    word_rankings.append((power, word))
-    word_rankings2.append((1, (power, word)))
-    print(f"word {i} is {word} with power {power}.")
-'''
-#pickle.dump((word_rankings), open("work_rankings_1.pickle",  'wb'))
-# Up to 6618
-
-word_rankings = pickle.load(open("work_rankings_1.pickle", 'rb'))
-ranked_words = list(list(zip(*sorted(word_rankings)))[1])
-
-## I want to find words _diffenent_ from the seed move.
-## Oh, huh, this is how I could systematically "solve" the game via a fixed decision tree!
-
-'''
-bword = 'aeros'
-bword_goals = dict()
-bword_plays = dict()
-for word in words:
-    hint = get_hints3(bword, word)
-    bword_goals[hint] = bword_goals.get(hint, []) + [word]
-print(f"There are {len(bword_goals)} distinct hints possible on move 1 with '{bword}'")
-
-# The options in each possible move.
-#>>> sorted([(h,len(ws)) for h, ws in bword_goals.items()], key=itemgetter(1), reverse=True)
-#>>> sorted([(h,len(ws)) for h, ws in bword_goals2.items()], key=itemgetter(1), reverse=True)
-
-# Take two.  I guess we really do want to go with the worst-case result.
-#3>>> sorted(test_p, key=itemgetter(2))[:10]
-#[(1751.6875, 2, 75), (3179.7, 2, 88), (4577.0, 2, 90), (459.6849315068493, 2, 91), (10278.25, 2, 94), (8803.75, 2, 95), (4077.4444444444443, 2, 97), (2623.214285714286, 2, 100), (7313.8, 2, 101), (4469.625, 2, 104)]
-# 800 -> 75 as least worst-case is pretty good.
-# 'layin'
-
-hint2 = 'ybbbb'
-bword2 = 'layin'
-bword_goals2 = dict()
-for word in bword_goals[hint2]:
-    hint = get_hints3(bword2, word)
-    bword_goals2[hint] = bword_goals2.get(hint, []) + [word]
-print(f"There are {len(bword_goals2)} distinct hints possible on move 2 with '{bword2}'")
-
-hint3 = 'bgbbb'
-bword3 = 'tagma'
-bword_goals3 = dict()
-for word in bword_goals2[hint3]:
-    hint = get_hints3(bword3, word)
-    bword_goals3[hint] = bword_goals3.get(hint, []) + [word]
-print(f"There are {len(bword_goals3)} distinct hints possible on move 3 with '{bword3}'")
-
-#print(sorted([(h,len(ws)) for h, ws in bword_goals3.items()], key=itemgetter(1), reverse=True))
-
-hint4 = sorted([(h,len(ws)) for h, ws in bword_goals3.items()], key=itemgetter(1), reverse=True)[0][0]
-test = bword_goals3[hint4]
-bword4 = sorted([(word, locate_word_possibilities(word, test)) for word in test], key=itemgetter(1))[0][0]
-
-bword_goals4 = dict()
-for word in bword_goals3[hint4]:
-    hint = get_hints3(bword4, word)
-    bword_goals4[hint] = bword_goals4.get(hint, []) + [word]
-print(f"There are {len(bword_goals4)} distinct hints possible on move 4 with '{bword4}'")
-
-hint5 = sorted([(h,len(ws)) for h, ws in bword_goals4.items()], key=itemgetter(1), reverse=True)[0][0]
-test = bword_goals4[hint5]
-bword5 = sorted([(word, locate_word_possibilities(word, test)) for word in test], key=itemgetter(1))[0][0]
-
-bword_goals5 = dict()
-for word in bword_goals4[hint5]:
-    hint = get_hints3(bword5, word)
-    bword_goals5[hint] = bword_goals5.get(hint, []) + [word]
-print(f"There are {len(bword_goals5)} distinct hints possible on move 5 with '{bword5}'")
-
-print(sorted([(h,len(ws)) for h, ws in bword_goals5.items()], key=itemgetter(1), reverse=True))
-'''
+# First stab at ranking words by how well they split the goals
+#word_rankings = pickle.load(open("work_rankings_1.pickle", 'rb'))
+#ranked_words = list(list(zip(*sorted(word_rankings)))[1])
 
 # WAY faster than locate_word_possibilities!
 def get_hint_distribution(word, possible_words):
