@@ -3,7 +3,7 @@ from functools import reduce
 from operator import itemgetter
 import numpy as np
 from pathlib import Path
-from random import sample, random
+from random import sample, random, shuffle
 import pickle
 import json
 import time
@@ -11,6 +11,9 @@ import time
 # The 12,972 words
 words = open("words.txt", 'r').read().splitlines()
 wordset = set(words)
+
+# I ordered the words differently, interspersing 'good' and 'random' words near the beginning
+zwords = open("zwords.txt", 'r').read().splitlines()
 
 # The official words
 official_goals = open("wordle_answers_alphabetical.txt", 'r').read().splitlines()
@@ -368,6 +371,20 @@ def int_to_hint(i):
 def get_hints5(word, goal):
     return int_to_hint(hintarr[worddic[word]][worddic[goal]])
 
+# Building said array of all hint pairs
+if False:
+    hintarr = np.zeros((num_words, num_words), dtype=np.uint8)
+    for i1 in range(num_words):
+        word1 = words[i1]
+        #worddic[i1] = word1
+        for i2 in range(num_words):
+            word2 = words[i2]
+            hintarr[i1][i2] = get_hints4(word1, word2)
+    np.save("hintarr.npy", hintarr)
+
+#hintarr = np.load("hintarr.npy")
+
+
 #>>> start = time.time(); len([get_hints5(w, 'pause') for w in words]); end = time.time(); print(f"{end - start}")
 #0.13312935829162598
 #>>> start = time.time(); len([get_hints3(w, 'pause') for w in words]); end = time.time(); print(f"{end - start}")
@@ -408,6 +425,7 @@ def dscore(hints):
 #ranked_words = list(list(zip(*sorted(word_rankings)))[1])
 
 # WAY faster than locate_word_possibilities!
+# Just use a dictionary or Counter to batch hints and the word filtering happens naturally.
 def get_hint_distribution(word, possible_words):
     hints = Counter()
     for goal in possible_words:
@@ -1054,6 +1072,9 @@ if False:
 sol_dico = pickle.load(open("official_goal_solution_fixed.pickle", "rb"))
 sol_dicho = pickle.load(open("official_goal_solution_hard.pickle", "rb"))
 
+# Take one of a wordle assist function where I had to manually keep track of the remaining words and the history 
+#def wordle_assist(guess, hint, remaining_words, move2="", num=3):
+
 class OWordle:
     def __init__(self, dic=sol_dico, move='salet'):
         self.dic = dic
@@ -1108,9 +1129,11 @@ xo = GWordle(possible_words=official_goals)
 #ho = OWordle(sol_dicho)
 
 #bsol = pickle.load(open("swift_bsol_words.pickle", 'rb'))
+
+# Uses the Wordle solver class to simulate gameplay for each goal
+# This is a sanity-check to make sure my solution is correct.
 if False:
-    sol = pickle.load(open("swiftlover6.pickle", 'rb'))
-    translate_res_new_to_old(sol)
+    sol = pickle.load(open("swiftlover6.pickle", 'rb')); translate_res_new_to_old(sol)
     fails = 0
     for n, goal in enumerate(words):#official_goals):
         print(f"Word {n} -- {goal}:")
@@ -1126,280 +1149,21 @@ if False:
             fails += 1
     print(f"\n\nFailed {fails} times.") 
 
-# So for each possible hint, get the words
-#>>>test = bword_goals['bbbyg']
-# Locate the best, worst, average possibilities over this space of words.
-#>>>test_p = [locate_pair_possibilities('aeros', word, test) for word in test]
-#>>> test_p.index((53.891352549889135, 2, 101))
-#47
-#>>> test[47]
-#'clons'
-#>>> sorted(test_p, key=itemgetter(0))[0]
-#(53.891352549889135, 2, 101)
-# Take the best one, say, clons
-#test = bword_goals['bbbyg'] 
-#print(len(test)) # 451
-#>>> sum(len(ws) for ws in bword_goals2.values())
-#451 options remaining?
-#>>> sorted([(h,len(ws)) for h, ws in bword_goals2.items()], key=itemgetter(1), reverse=True)
-#[('bbybg', 101), ('bbgbg', 77), ('byybg', 66), ('bbyyg', 40), ('bggbg', 25), ('bygbg', 20), ('ybybg', 15), ('gbybg', 15), ('bbggg', 14), ('bbgyg', 13), ('bbygg', 11), ('gbgbg', 9), ('gggbg', 7), ('gyybg', 5), ('byyyg', 5), ('yyybg', 4), ('ybgbg', 4), ('gbggg', 3), ('gbyyg', 3), ('byygg', 3), ('yggbg', 2), ('gbygg', 2), ('byggg', 2), ('ybyyg', 2), ('ggggg', 1), ('gygbg', 1), ('ybggg', 1)]
 
-#test_p = [locate_word_possibilities(word, test) for word in test]
+# Some good words
+#good_words = ["lurid", "poise", "roast", "caste", "adore", "death", "gymps", "nymph", "fjord", "vibex", "waltz"
+#             ,"gucks", "vozhd", "waqfs", "treck", "jumpy", "bling", "brick", "clipt", "kreng", "prick", "pling"
+#             ,"bemix", "clunk", "grypt", "xylic", "cimex", "brung", "blunk", "kempt", "quick", "verbs", "arose"]
 
-#>>> test_p.index((50.75609756097561, 2, 41))
-#44
-#>>> test[44]
-#'moits'
-
-
-#for hint, word_list in bword_goals.items():
-#    bword_plays[hint]
-
-good_words = ["lurid", "poise", "roast", "caste", "adore", "death", "gymps", "nymph", "fjord", "vibex", "waltz"
-             ,"gucks", "vozhd", "waqfs", "treck", "jumpy", "bling", "brick", "clipt", "kreng", "prick", "pling"
-             ,"bemix", "clunk", "grypt", "xylic", "cimex", "brung", "blunk", "kempt", "quick", "verbs", "arose"]
-
+# A one-off greedy Wordle solver using a bit of hacks, such as this "good words" list.
+# It got around 97.4% on the full dataset
 def solve_wordle(seed, goal, possible_words, seed2=None, sample_num=0):
-    move = seed
-    power = 0
-    for i in range(0,5):
-        if i == 0:
-            #power = calculate_word_possibilities2(move, possible_words)
-            move = move
-        elif i == 1 or i == 2:
-            if seed2 and i == 1:
-                next_words = get_different_word(move, hints, words)
-                move = seed2
-                #power = calculate_word_possibilities2(move, possible_words)
-            else:
-                if i == 1:
-                    next_words = get_different_word(move, hints, words)
-                elif i == 2:
-                    next_words = get_different_word(move, hints, next_words)
-                next_moves = []
-                if len(possible_words) > 444 or i == 1:
-                    good_sample = sample(next_words, sample_num) + good_words
-                    for word1 in words:
-                        for word2 in good_sample:
-                            if word1 != word2:
-                                next_moves.append((score_pair_distribution(word1, word2, possible_words), word1))
-                                #next_moves.append((calculate_pair_possibilities2_with_dscore(word1, word2, possible_words), word1))
-                elif len(possible_words) < 66:
-                    for word in (possible_words + good_words) :
-                        next_moves.append((score_hint_distribution(word, possible_words), word))
-                        #next_moves.append((calculate_word_possibilities2_with_dscore(word, possible_words), word))
-                else:
-                    for word in (next_words + good_words):
-                        next_moves.append((score_hint_distribution(word, possible_words), word))
-                        #next_moves.append((calculate_word_possibilities2_with_dscore(word, possible_words), word))
-                power, move = sorted(next_moves)[0]
-        else:
-            next_moves = []
-            if i == 3:
-                for word in (possible_words + good_words):
-                    next_moves.append((score_hint_distribution(word, possible_words), word))
-                    #next_moves.append((calculate_word_possibilities2_with_dscore(word, possible_words), word))
-            else:
-                for word in possible_words:
-                    next_moves.append((score_hint_distribution(word, possible_words), word))
-                    #next_moves.append((calculate_word_possibilities2_with_dscore(word, possible_words), word))
-            power, move = sorted(next_moves)[0]
-        hints = get_hints2(move, goal)
-        print(f"Move #{i+1} ({move}) hints are {hints} with score of {len(possible_words)} into {power if power > 0  else '-'}.")
-        possible_words = filter_word_by_goal2(move, goal, possible_words)
-        print(f"There are {len(possible_words)} options remaining.")
-        if len(possible_words) == 1:
-            break
-        if len(possible_words) < 11:
-            print(f"They are: {possible_words}.")
-    return possible_words
 
-def solve_wordle_broken(seed, goal, possible_words, seed2=None, sample_num=66):
-    move = seed
-    power = 0
-    best_words = ranked_words[:sample_num]
-    good_sample = best_words + good_words
-    for i in range(0,5):
-        start_time = time.time()
-        if i == 0:
-            #power = calculate_word_possibilities2(move, possible_words)
-            move = move
-        elif i == 1 or i == 2:
-            if seed2 and i == 1:
-                next_words = get_different_word(move, hints, ranked_words)
-                move = seed2
-                #power = calculate_word_possibilities2(move, possible_words)
-            else:
-                if i == 1:
-                    next_words = get_different_word(move, hints, ranked_words)
-                elif i == 2:
-                    next_words = get_different_word(move, hints, next_words)
-                next_moves = []
-                if len(possible_words) > 444 or i == 1:
-                    good_sample = good_words + next_words[:sample_num]
-                    for word1 in good_sample:
-                        for word2 in best_words:
-                            if word1 != word2:
-                                next_moves.append((calculate_pair_possibilities2_with_dscore(word1, word2, possible_words), word1))
-                elif len(possible_words) < 100:
-                    for word in (possible_words + good_sample) :
-                        next_moves.append((calculate_word_possibilities2_with_dscore(word, possible_words), word))
-                else:
-                    for word in (next_words + good_words):
-                        next_moves.append((calculate_word_possibilities2_with_dscore(word, possible_words), word))
-                power, move = sorted(next_moves)[0]
-        else:
-            next_moves = []
-            if i == 3:
-                for word in (possible_words + good_sample):
-                    next_moves.append((calculate_word_possibilities2_with_dscore(word, possible_words), word))
-            else:
-                for word in possible_words:
-                    next_moves.append((calculate_word_possibilities2_with_dscore(word, possible_words), word))
-            power, move = sorted(next_moves)[0]
-        hints = get_hints2(move, goal)
-        print(f"Move #{i+1} ({move}) hints are {hints} with score of {len(possible_words)} into {power if power > 0  else '-'}.")
-        possible_words = filter_word_by_goal2(move, goal, possible_words)
-        print(f"There are {len(possible_words)} options remaining.")
-        end_time = time.time()
-        print(f"Round #{i+1} took {end_time - start_time} seconds.")
-        if len(possible_words) == 1:
-            break
-        if len(possible_words) < 11:
-            print(f"They are: {possible_words}.")
-    return possible_words
+# I spent some time trying to analyze *ESTS and *ILLS as hard word sets.
+# I thought maybe it would be possible to find a simple combinatorial argument why they can or can't be solved.
+# It quickly led to a combinatorial explosion, however . . ..
 
-if False:
-    failed = []
-    failed2 = []
-    for i, word in enumerate(words):
-        possible_words = solve_wordle('stare', word, words, seed2='lurid')
-        if len(possible_words) > 1:
-            failed.append((word, possible_words))
-            # Try again!  Without the additional seed2 :- )
-            possible_words2 = solve_wordle('stare', word, words) 
-            if len(possible_words2) > 1:
-                print(f"Failed on #{i} with {word} and {len(possible_words)} options left.")
-                print(f"Failed again on #{i} with {word} and {len(possible_words2)} options left.")
-                print(possible_words)
-                print(possible_words2)
-                failed2.append((word, possible_words2))
-            else:
-                print(f"#{i}: {word} is solved on take two.")
-        else:
-            print(f"#{i}: {word} is solved.")
-    print(f"Success rate 1 is {1 - len(failed) / num_words}.")
-    print(f"Success rate 2 is {1 - len(failed2) / num_words}.")
-
-#Success rate 1 is 0.9443416589577551.
-#Success rate 2 is 0.9747918593894542.
-#>>> len(failed)
-#722
-#>>> len(failed2)
-#327
-#>>> pickle.dump((failed, failed2), open("to_solve.pickle", "wb"))
-failed1, failed2 = pickle.load(open("to_solve.pickle", "rb"))
-fs1 = set([w for w, _ in failed2])
-failed3 = retrieve_false_results(sol_dic)
-fs2 = set([w[-1] for _, (w,n) in failed3])
-
-def wordle_assist(guess, hint, remaining_words, move2="", num=3):
-    possible_words = filter_word_by_hints(guess, hint, remaining_words)
-    next_move = []
-    move2 = [move2] if move2 else []
-    if num == 0:
-        print(f"I recommend 'stare'.")
-        return "stare"
-    if num == 1:
-        for w1 in words:
-            for w2 in good_words:
-                #next_move.append((calculate_pair_possibilities3_with_dscore(w1, w2, possible_words), w1, w2))
-                next_move.append((score_pair_distribution(w1, w2, possible_words), w1, w2))
-        _, move, move2 = sorted(next_move)[0]
-        print(f"I recommend '{move}' and perhaps next '{move2}'.")
-        return possible_words, move
-    for w in (possible_words + move2):
-        #next_move.append((calculate_word_possibilities3_with_dscore(w, possible_words), w))
-        next_move.append((score_hint_distribution(w, possible_words), w))
-    _, move = sorted(next_move)[0]
-    print(f"I recommend '{move}'.")
-    return possible_words, move
-
-if False:
-    broken = []
-    winners = []
-    stats = []
-    killers = Counter() #set() # {'cigar', 'sissy', 'rebut'}
-    total = len(words)
-    possible_solutions = [solution for wordset in best_quintuples_unique_dict.values() for solution in wordset]
-    for solution in possible_solutions:
-        solved = 0
-        failed = 0
-        options_left = 0
-        wtf = [] ## It's empty.
-        success = True
-        for goal in words:
-            #hints = all_hints(solution, goal)
-            #green_hints = hints[0]
-            #yellow_hints = hints[1]
-            #green_filtered_words = filter_greens(green_hints, sgb_words)
-            #yellow_filtered_words = filter_yellows(yellow_hints, green_filtered_words)
-            possible_words = filter_solution_by_goal(solution, goal, words)
-            num_possible_words = len(possible_words)
-            if num_possible_words == 1:
-                if possible_words[0] == goal:
-                    #solved.append(goal)
-                    solved = solved + 1
-                    options_left = options_left +  1
-                    #print(f"{goal} is solved")
-                else:
-                    wtf.append(goal)
-                    print(f"{goal} is not {yellow_filtered_words[0]}!")
-            else:
-                #position_filtered_words = filter_yellow_positions(yellow_hints, yellow_filtered_words)
-                #num_options = len(position_filtered_words)
-                #if num_options == 1:
-                #    #solved.append(goal)
-                #    solved = solved + 1
-                #    options_left = options_left +  1
-                #else:
-                killers[goal] = killers[goal] + 1
-                failed = failed + 1
-                options_left = options_left + num_possible_words
-                if success:
-                    broken.append((solution, goal, possible_words))
-                    print(f"{goal} breaks {solution} with {num_possible_words} possibilities.")#: {position_filtered_words}.")
-                success = False
-                    #break
-        if success:
-            winners.append(solution)
-            print(f"{solution} is victorious!")
-        winrate = solved / total
-        options_left = options_left / total
-        print(f"{solution} has winrate {winrate} with {solved} solved and {failed} failures with on average {options_left} remaining possible words.")
-        stats.append((solved, failed, winrate, options_left, solution))
-
-
-#with open("tmps1.pickle", 'wb') as f:
-#    pickle.dump((solved, mada), f)
-
-# ///// #
-
-#worddic = dict()
-#worddic = dict((word, c) for c, word in enumerate(words))
-#hintdic = dict()
-if False:
-    hintarr = np.zeros((num_words, num_words), dtype=np.uint8)
-    for i1 in range(num_words):
-        word1 = words[i1]
-        #worddic[i1] = word1
-        for i2 in range(num_words):
-            word2 = words[i2]
-            hintarr[i1][i2] = get_hints4(word1, word2)
-    np.save("hintarr.npy", hintarr)
-
-#hintarr = np.load("hintarr.npy")
-
+# Functions to get all words that match i letters of *ESTS or *ILLS, taking into account that to help with 'tests', the word must have two ts or a t in the first position. 
 def match_ests(w, l): # So guessing 't' in any but the first position is useless as it'll be yellow in all *ests unless there are two ts
     match_count = set(w) & l
     num_ts = Counter(w)['t']
@@ -1413,7 +1177,7 @@ def gests(l, words=words):
         mw[i + 1] = set([w for w in words if len(match_ests(w, l)) > i]) # len(set(w) & l1) > i]
     return mw
 
-def match_gills(w, l): # So guessing 't' in any but the first position is useless as it'll be yellow in all *ests unless there are two ts
+def match_gills(w, l): 
     match_count = set(w) & l
     num_ss = Counter(w)['s']
     num_ls = Counter(w)['l']
@@ -1429,226 +1193,18 @@ def gills(l):
         rw[i + 1] = set([w for w in words if len(match_gills(w, l)) > i]) # len(set(w) & l1) > i]
     return rw
 
-
-# Can I find all possible solutions for "vests" within *ests? -- I'll start with all solutions where 'vests' can be the 5th move!
-# Or maybe all solutions for *ests within 4 moves, i.e., after the 5th move, every word is isolated.
 #['bests', 'fests', 'gests', 'hests', 'jests', 'kests', 'lests', 'nests', 'pests', 'rests', 'tests', 'vests', 'wests', 'yests', 'zests']
 #{'y', 'j', 'l', 'k', 'g', 'f', 'z', 't', 'r', 'b', 'n', 'h', 'v', 'p', 'w'}
 hest = [w for w in words if w[1:] == 'ests'] # len = 15 
-l0 = set([w[0] for w in hest]) # len = 15
-shest = set(hest)
+#l0 = set([w[0] for w in hest]) # len = 15
+#shest = set(hest)
 hills = [w for w in words if w[1:] == 'ills']
-shills = set(hills) 
-r0 = set([w[0] for w in hills]) # len = 19
+#shills = set(hills) 
+#r0 = set([w[0] for w in hills]) # len = 19
 # What if I try it for this? 
-rw = gills(r0)
-# Now there are 9 with 5, 952 with 4, 6202 with 3...
-# Is it actually worse than before?
-# Combinatorially, how can we get 18/19 letters in 5 moves?  We need at least 3.6 per move.
+#rw = gills(r0)
 
-if False:
-    hashes = set()
-    pairs = []
-    for w1 in rw[3]:
-        for  w2 in rw[3]:
-            hsh = "".join(sorted(match_gills(w1, r0) | match_gills(w2, r0)))
-            if not hsh in hashes:
-                hashes.update([hsh])
-                pairs.append((len(hsh), w1, w2))
-
-#>>> Counter(c for c, _, _ in spairs)
-#Counter({7: 26170, 6: 24151, 5: 10642, 8: 8816, 4: 3264, 3: 689, 9: 277})
-# If it's 3, then we'd have to score 15/19 in 3 moves?
-# >>> spairs = sorted(pairs)
-#spairs2 = [(c, w1, w2, get_hash(w1, w2)) for c, w1, w2 in spairs]
-#>>> pickle.dump((hashes, spairs2), open("gills_pairs.pickle", 'wb'))
-if False:
-    hashes, spairs = pickle.load(open("gills_pairs.pickle", 'rb'))
-    hashes3 = set()
-    triples = []
-    i = 0
-    for _, w1, w2, hsha in spairs:
-        if i % 1000 == 0:
-            print(f"Step {i/1000} / 74.  We have {len(triples)} triples so far.")
-        hshb = set(hsha)
-        for w3 in rw[3]:
-            hsh = "".join(sorted((match_gills(w3, r0) | hshb)))
-            if not hsh in hashes and not hsh in hashes3:
-                hashes3.update([hsh])
-                triples.append((len(hsh), hsh, w1, w2, w3))
-        i += 1
-#striples = sorted(triples, reverse=True)
-#pickle.dump((hashes3, striples), open("gills_triples.pickle", 'wb'))
-if False:
-    hashes, _ = pickle.load(open("gills_pairs.pickle", 'rb'))
-    hashes3, triples = pickle.load(open("gills_triples.pickle", 'rb'))
-    old_hashes = hashes | hashes3
-    hashes4 = set()
-    quads = []
-    i = 0
-    for _, hsha, w1, w2, w3 in triples:
-        if i % 1000 == 0:
-            print(f"Step {i/1000} / 315.  We have {len(quads)} quadruples so far.")
-        hshb = set(hsha)
-        for w4 in rw[3]:
-            hsh = "".join(sorted((match_gills(w4, r0) | hshb)))
-            if not hsh in old_hashes and not hsh in hashes4:
-                hashes4.update([hsh])
-                quads.append((len(hsh), hsh, w1, w2, w3, w4))
-        i += 1
-#I need to test for the presence of 15 letters, well, 14, t possibly twice.
-#If I cross of 3 letters a move, then after 4 moves, I'll only have hit 12 letters, which is insufficient. 3*3+4 = 13 is also insufficient.
-# 3*2 + 4*2 = 14 might work. 5 + 3*3 = 14
-# There is only one word that hit 5 of these: ['glyph'] -- 'grypt' is disqualified due tot he final t.
-# There are 26 that hit 4 of them.  There are 13 ways to get 9 letters in two words.
-# There are 2664 words with 3 of these.
-#>mw = gests(l0)
-# So for the first move I need either:
-# A) mw[5] ~ 'glyph'
-# B) mw[4] x 2 ~ two+ of the words that hit 4
-# Otherwise, there's no way I can cover them in 4 moves.  And as order doesn't matter, it's without loss of generality.
-
-# The 3000 possibilities to cover 8 letters with two words.
-#>mp4 = list(set([tuple(sorted([w1, w2])) for c, w1, w2 in [(len(match_ests(w1, l0) | match_ests(w2,l0)), w1, w2) for w1 in mw[4] for w2 in mw[4]] if c == 8 and w1 not in mw[5] and w2 not in mw[5]]))
-# Let's solve the case starting with mw[5] first.  Move 1 is glyph or grypt.
-#>m1 = {'glyph':get_hint_distribution_with_words('glyph', hest)} # Move 1
-#glyph:{'bbbbb': ['bests', 'fests', 'jests', 'kests', 'nests', 'rests', 'tests', 'vests', 'wests', 'zests'], 'gbbbb': ['gests'], 'bbbby': ['hests'], 'bybbb': ['lests'], 'bbbyb': ['pests'], 'bbybb': ['yests']}
-#>h1 = m1['glyph']['bbbbb'] # The 10 / 15 words remaining after move 1.  Now there are 3 moves to hit 9+ letters.
-#>l1 = set([w[0] for w in h1]) # {'n', 't', 'j', 'z', 'v', 'w', 'k', 'b', 'f', 'r'} of len 10
-#>mw1 = gests(l1) # mw[5] == set(), there are 13 that hit 4 and 478 that hit 3.
-#>m1, h1, l1, mw1 = pickle.load(open("roundA.pickle", 'rb'))
-#hit7 = list(set([tuple(sorted([w1, w2])) for c, w1, w2 in [(len(match_ests(w1, l1) | match_ests(w2,l1)), w1, w2) for w1 in mw1[4] for w2 in mw1[4]] if c == 7]))
-# There are no pairs of mw[4] that hit 8 letters.  There are actually none that hit 7, either! 
-# There are 37 that hit 6.  To get to 9, we need a 3+ letter word, then.  Which means, I can actually just look at ways to hit 9 from mw1[3]!
-#>hit9 = list(set([tuple(sorted([w1, w2, w3])) for c, w1, w2, w3 in [(len(match_ests(w1,l1) | match_ests(w2,l1) | match_ests(w3,l1)), w1, w2, w3) for w1 in mw1[3] for w2 in mw1[3] for w3 in mw1[3]] if c == 9]))
-#>hit9 = pickle.load(open('hit9.pickle', 'rb')) # 2246 options.
-# Let's make sure these are solutions!
-#>>> s = []
-#>>> f = []
-#>>> for w2, w3, w4 in hit9:
-#    ...  bb = max([c for c, _ in get_history_buckets(play_history(['glyph', w2, w3, w4], hest))])
-#    ...  if bb == 1:
-#        ...   s.append((w2,w3,w4))
-#        ...  else:
-#            ...   f.append((bb, (w2,w3,w4)))
-# Yup, f is empty.  
-# So I now have all solutions of type (A) solving *ests on the 5th move.
-#>hist9a = [('glyph', w2, w3, w4) for w2, w3, w4 in hit9]
-# The next question is, how's this turn out for ALL words?  
-# If I can solve *ests on the 5th move.  And there's no way to solve *ests on the 4th move.  That would require 2x 5 letter hitting words, but there is only one.
-# To be able to solve *ests by the 6th move, in all of these cases, I'll need the *ests to be in buckets that can be solved with only one more move for #5.
-if False:
-    #candidates4, candidates5 = pickle.load(open("tmp_cands.pickle", 'rb'))
-    unsolvable = []
-    solvable = []
-    for history in hist9a:
-        hist_buckets = get_history_buckets(play_history(history, words))
-        hard_buckets = sorted((wl for c, wl in hist_buckets if shest & set(wl) and len(wl) > 2), reverse = True)
-        solved = True
-        for wl in hard_buckets:
-            if sorted([(score_hint_distribution(w, wl), w) for w in words])[0][0] > 1:
-                unsolvable.append( (history, wl) )
-                solved = False
-                print(f"* * * {history} is not solvable")
-                break
-        if solved:
-            print(f"{history} is solvable.")
-            solvable.append(history)
-# OH!  I messed up.  There are solvable ones.  Now what?  Well, see how the solution works for every other bucket!
-#  ('glyph', 'bawks', 'terfe', 'zanja') is broken by (2, ['torus', 'tiros', 'tirrs', 'torcs', 'toros', 'torrs', 'torts', 'turds', 'turms', 'turrs']) and (3, ['video', 'modem', 'cided', 'cimex', 'codec', 'coded', 'codex', 'cooed', 'coved', 'coxed', 'cumec', 'diced', 'dived', 'domed', 'doved', 'doxed', 'duded', 'equid', 'ivied', 'mimed', 'mimeo', 'mixed', 'mooed', 'moved', 'muxed', 'odeum', 'ummed', 'viced'])
-# ('glyph', 'bawks', 'terfe', 'zanja') is broken by (2, ['tiars', 'trads', 'trams', 'trass', 'trats', 'tsars'])
-if False: # Repeat of the above over all words :-3
-    solvable_old, _ = pickle.load(open("hist9a_proof.pickle", 'rb'))
-    unsolvable = []
-    solvable = []
-    for history in solvable_old:
-        hist_buckets = get_history_buckets(play_history(history, words))
-        hard_buckets = sorted((wl for c, wl in hist_buckets if len(wl) > 2), reverse = True)
-        solved = True
-        for wl in hard_buckets:
-            if sorted([(score_hint_distribution(w, wl), w) for w in words])[0][0] > 1:
-                unsolvable.append( (history, wl) )
-                solved = False
-                print(f"* * * {history} is not solvable")
-                break
-        if solved:
-            print(f"{history} is solvable.")
-            solvable.append(history)
-
-# Wow.  None are solvable.  All fail on pretty much the same bucket: 
-#>>> unsolvable[1969]
-#(('glyph', 'bevor', 'funks', 'towzy'), ['temes', 'tests', 'tetes', 'texes', 'texts', 'tices', 'tides', 'times', 'tomes', 'toses', 'totes'])
-# This was every possibility starting with the 5-letter word, "glyph"
-#pickle.dump(unsolvable, open("hist9a_proof.pickle", "wb"))
-#pickle.dump((solvable, unsolvable), open("hist9a_proof.pickle", "wb"))
-#pickle.dump(unsolvable, open("hist9a_proof_hard.pickle", "wb"))
-# -- Okay, so those 4 letter combos starting with 'glyph' that solve *ests don't solve the whole thing.
-
-# B) mw[4] x 2 ~ two+ of the words that hit 4
-# Okay, now on to (B).  There's no way to start with glyph and cover the 14 letters needed with a solution.
-# Hmm, it's not a perfect proof.  Blegh.  But it's pretty close.  It says that We can devote 4 moves to solving *ests.  
-# But, yeah, maybe 5 moves could solve *ests and everything else even though it doesn't in 4.
-# So, yeah, I really do want to be looking at every possible way to solve *ests.
-# Candidates can be any size, but will be at least length 4.  The problem is they could in principle be of length 5 and 'work' everywhere.
-# However, I think I can only search through words that fill at least one character from l0-hest.  Otherwise, just have the length 4 solution.
-#>hwords = list(mw[1]) # At least one letter
-# At each step, I would want to only enumerate through words that hit at least one new one, too.
-# I have 5 words to get 14, so if there are more than 5 remaining by word 4, I'm fucked.  If there are 4 remaining, it's only 'glyph', lol.  Which, actually, will be there for word #1, so I can skip it, too.
-# Thus by word 4, I need to have at most 4 letters left.  If the cut_off is 5 then I need at least 4.
-# And if there are 0 or 1 letters left with word 4, then I win :D
-# What about by word number 3?  I have two words left to get 9+ letters.  Some possibilities exist.   
-# If there are 8 letters left to get (meaning 9 total), assuming I can get at most 4 in the next round, I need to get at least 4 in this round.
-# So the formula would be {remaining - 4}
-# What about by the second word? ... Well, assuming 'glyph' is w1 or w2, we can score at most 12... so if it's more than that, yeah, fuck it. 
-# ... okay, not even one word in overnight.  I need a smarter way.  Look for the confounding factors in the hist9a case?
-# Any solution must also work there, which can further reduce the space of possibilities?
-if False:
-    candidates4 = []
-    candidates5 = []
-    for i1, w1 in enumerate(hwords): #enumerate(words):
-        best_score = 0
-        m1 = match_ests(w1, l0)
-        l1 = l0 - m1
-        mw1 = [w for w in hwords[i1+1:] if len(match_ests(w, l1)) > 0]
-        for i2, w2 in enumerate(mw1):#enumerate(words[i1+1:]):
-            m2 = match_ests(w2, l1)
-            l2 = l1 - m2
-            if len(l2) > 12: # Say m1 matches 1 and m2 also matches 1, then l3 is of size 15 - 2 == 13.  I have 3 more words, so I'm fucked
-                continue
-            else:
-                mw2 = [w for w in mw1[i2+1:] if len(match_ests(w, l2)) > 0]
-                for i3, w3 in enumerate(mw2): #enumerate(words[i2+1:]):
-                    m3 = match_ests(w3, l2)
-                    l3 = l2 - m3
-                    remaining = len(l3) - 1
-                    if remaining > 8:
-                        continue
-                    else:
-                        cut_off3 = max(remaining - 4, 0)
-                        mw3 = [w for w in mw2[i3+1:] if len(match_ests(w, l3)) > cut_off3]
-                        for i4, w4 in enumerate(mw3): #enumerate(words[i3+1:]):
-                            m4 = match_ests(w4, l3)
-                            l4 = l3 - m4
-                            cut_off4 = len(l4) - 1
-                            if cut_off4 > 4:
-                                continue
-                            elif cut_off4 >= 1:
-                                mw4 = [w for w in mw3[i3+1:] if len(match_ests(w, l4)) >= cut_off4]
-                                for i5, w5 in enumerate(mw4): #enumerate(words[i4+1:]):
-                                    m5 = match_ests(w5, l0)
-                                    score = len(m1 | m2 | m3 | m4 | m5) 
-                                    if score > best_score:
-                                        best_score = score
-                                    if score >= 14:
-                                        candidates5.append((score,(w1, w2, w3, w4, w5)))
-                            else: 
-                                score = len(m1 | m2 | m3 | m4) 
-                                if score > best_score:
-                                    best_score = score
-                                candidates4.append((score,(w1, w2, w3, w4)))
-        print(f"Best score for {w1} ({i1}) is {score}.") 
-
-
+# Returns hint-buckets and their counts for words over the possible_words
 def get_hc(word, possible_words):
     hints = dict()
     counts = Counter()
@@ -1659,8 +1215,8 @@ def get_hc(word, possible_words):
     return hints, counts
 
 # Hard mode guesses.  Only constraints are that greens must match and yellows must be present
-# I use it like this, however... So 
-#possible_guesses = get_hc(guess, gwords)[0][hint]
+# I was initially filtering all words with letters that are greyedout in the hints.  i
+# Making hard mode much harder but easier to crunch.
 def get_hg(guess, hint, possible_words):
     remaining_guesses = []
     green_constraints = []
@@ -1685,145 +1241,68 @@ def get_hg(guess, hint, possible_words):
             remaining_guesses.append(goal)
     return remaining_guesses
 
-# Okay, it's been long enough.
-# Let's just brute force it.  
-# How do I really just brute force the NP-complete problem?
-# Well, I'd want to go through each starting word.
-# Which is word_distros, right?
-# Then for each hint in that, I want to try every single second word... and take the best, right?
-# So, really, there's no such thing as a guess.
-# bwords are the words to split
-#guess = 'cigar'; bwords = words[:100]
-#>>> Counter(c for _, c in retrieve_all_results(sol_dico))
-#Counter({4: 1557, 5: 430, 3: 283, 2: 45})
-#>>> Counter(c for _, c in retrieve_all_results(sol_dicho))
-#Counter({4: 1143, 3: 835, 5: 224, 2: 90, 6: 23})
-#>>> si_sols3, fails3 = pickle.load(open("si_sols3.pickle", 'rb'))
-#>>> Counter(c for _, c in retrieve_all_results(si_sols3))
-#Counter({4: 6451, 5: 5113, 3: 763, 6: 614, 2: 21, 7: 7, 8: 3})
-# Okay, I know that I can solve everything in at most 8 words.
-
-# I realized I can store as tuples the wordsets that can't be solved.
-# The lack of the words in moves 1-3 are okay because by construction they won't disambiguate this wordset.
-#move4 = dict()
-#move5 = dict()
-#move4 = pickle.load(open("move4.pickle", 'rb'))
-#move5 = pickle.load(open("move5.pickle", 'rb'))
-move4_count = 0
-move3_count = 0
-#moves = dict((i, dict()) for i in range(1,6))
-#moves = pickle.load(open("moves.pickle", 'rb'))
-# What if I make smoves for solutions?
-moves, smoves, unsolved, solved_indices = pickle.load(open("sdata2.pickle", 'rb'))
+# The structure of the memory dictionaries.  Sets/lists can be hashed as sorted tuples. 
 moves = dict((i, dict()) for i in range(1,6))
 smoves = dict((i, dict()) for i in range(1,6))
+
+# Logs to keep track of how many times I used the memory dictionaries.
 move_counts = dict((i, 0) for i in range(1,6))
 smove_counts = dict((i, 0) for i in range(1,6))
 
-def dump4():
-    pickle.dump(move4, open("move4.pickle", "wb"))
-def dump5():
-    pickle.dump(move5, open("move5.pickle", "wb"))
-def dumpmoves():
-    pickle.dump(moves, open("moves.pickle", "wb"))
+#moves, smoves, unsolved, solved_indices = pickle.load(open("sdata2.pickle", 'rb'))
+
 def recupdate(moves1, moves2):
     for i, v in moves1.items():
         v.update(moves2[i])
 def updatemoves(moves2):
-    #moves2 = pickle.load(open("moves.pickle", 'rb'))
     recupdate(moves, moves2)
-    #dumpmoves()
 
-def brute_force_wordle(bwords, gwords, move=1, history=[], hard=False, limit=69, fixed_start=None, checkthree=False, order=False):
-    #global move3_count
-    #global move4_count
+# The brute force Wordle solverk that tries to solve bwords with gwords as guesses from move=1. 
+# It can do hard mode and can be given an upper limit.  Once it solves a branch within the limit, it doesn't search further.
+# You can give it a fixed starting move.  The option to check moves 3 away from the end is probably buggy.
+# If order is true, then it will search in the greedy order of which words split bwords into buckets 'best', i.e., with the least-bad largest-bucket.
+def brute_force_wordle(bwords, gwords, move=1, history=[], hard=False, limit=69, fixed_start=None, fixed_second=None, checkthree=False, order=False, log_depth=5):
     best_score = len(bwords) + move
     solution = dict()
     good_move = None
     rmove = limit - move
     if rmove <= 0: # move >= limit:
         return best_score, (move, 'infinity', ",".join(bwords), history)
-    # check if it's already been broken
-    if rmove <= 2 or (checkthree and rmove <= 4): #move >= limit - 2:
-        key = tuple(sorted(bwords)); #d = limit - move
+    # check if it's already been broken or solved
+    if rmove <= 2 or (checkthree and rmove <= 3): #move >= limit - 2:
+        key = tuple(sorted(bwords)); 
         if key in moves[rmove]:
             move_counts[rmove] += 1
             return best_score, solution
         if key in smoves[rmove]:
             good_move = smoves[rmove][key]
             smove_counts[rmove] += 1
-    if move < 5: # I don't like the text to scroll by too fast . . .
+    if move < log_depth:
         print(f"Move {move} ({history+['*']}) trying to solve {len(bwords)} words, starting with {bwords[:5]}.")
-    '''
-    if move == limit - 1: # 5, generally
-        key = tuple(sorted(bwords))
-        if key in move5:
-            move5_count += 1
-            return best_score, solution
-    elif move == limit - 2: # 4, generally
-        key = tuple(sorted(bwords))
-        if key in move4:
-            move4_count += 1
-            return best_score, solution
-    '''
     lwords = len(bwords)
     if fixed_start:
         i = gwords.index(fixed_start)
         to_guess = [fixed_start]; gwords = to_guess + gwords[:i] + gwords[i+1:]
     else:
+        # Play a winning move from memory
         if good_move in gwords:
             i = gwords.index(good_move)
             to_guess = [good_move] + gwords[:i] + gwords[i+1:]
         elif order and move >= 2:
             to_guess = gwords
             to_guess = [t[1] for t in sorted([(score_hint_distribution(word, bwords), word) for word in to_guess])]
-            '''
-            if 'polar' in to_guess:
-                del to_guess[to_guess.index('polar')]; to_guess.append('polar')
-            if 'poral' in to_guess:
-                del to_guess[to_guess.index('poral')]; to_guess.append('poral')
-            if 'loran' in to_guess:
-                del to_guess[to_guess.index('loran')]; to_guess.append('loran')
-            if 'parol' in to_guess:
-                del to_guess[to_guess.index('parol')]; to_guess.append('parol')
-            if 'morae' in to_guess:
-                del to_guess[to_guess.index('morae')]; to_guess.append('morae')
-            if 'realo' in to_guess:
-                del to_guess[to_guess.index('realo')]; to_guess.append('realo')
-            if 'roues' in to_guess:
-                del to_guess[to_guess.index('roues')]; to_guess.append('roues')
-            if 'rouen' in to_guess:
-                del to_guess[to_guess.index('rouen')]; to_guess.append('rouen')
-            if 'ureal' in to_guess:
-                del to_guess[to_guess.index('ureal')]; to_guess.append('ureal')
-            if 'porae' in to_guess:
-                del to_guess[to_guess.index('porae')]; to_guess.append('porae')
-            if 'pareu' in to_guess:
-                del to_guess[to_guess.index('pareu')]; to_guess.append('pareu')
-            if 'pareo' in to_guess:
-                del to_guess[to_guess.index('pareo')]; to_guess.append('pareo')
-            if 'oaked' in to_guess:
-                del to_guess[to_guess.index('oaked')]; to_guess.append('oaked')
-            if 'uraos' in to_guess:
-                del to_guess[to_guess.index('uraos')]; to_guess.append('uraos')
-            '''
-            '''
-            if move == 2:
-                good_move = "swift"
-                i = gwords.index(good_move)
-                to_guess = [good_move] + gwords[:i] + gwords[i+1:]
-            '''
         else:
             to_guess = gwords
+        if not good_move and fixed_second and move == 2:
+            i = gwords.index(fixed_second)
+            to_guess = [fixed_second] + gwords[:i] + gwords[i+1:]
         gwords = to_guess
     for i, guess in enumerate(to_guess):
         tmp_history = history + [guess]
         hint_dist, counts = get_hc(guess, bwords)
         score = counts.most_common(1)[0][1]
-        #print(f"{guess} ~ {counts}")
-        #print(hint_dist)
+        # If the worst-case bucket is of size 1, that means we can win in the next move for each hint!
         if score == 1:
-            #print(f"{guess} is done.")
             for hint, wordlist in hint_dist.items():
                 word = wordlist[0]
                 if guess == wordlist[0]:
@@ -1832,24 +1311,24 @@ def brute_force_wordle(bwords, gwords, move=1, history=[], hard=False, limit=69,
                 else:
                     solution[hint] = (move+1, word, tmp_history+[word])
                     best_score = move+1
-            if rmove <= 2 or (checkthree and rmove <= 4):
+            if rmove <= 2 or (checkthree and rmove <= 3):
                 smoves[rmove][key] = guess
             return best_score, solution
+        # Otherwise, if the word doens't separate the words at all or we only have one move left, we lose.
         if not fixed_start and (score == lwords or move == limit - 1):
             continue
-        # So it's not solved.  We need to try every word on each hint!
+
+        # Now that it's not solved and we still have a chance, we need to try to brute force each hint's bucket of words!
         next_scores = dict()
         worst_score = move
         for hint, wordlist in hint_dist.items():
             lwd = len(wordlist)
             if lwd > 1:
                 if hard:
-                    possible_guesses = get_hg(guess, hint, gwords) #get_hc(guess, gwords)[0][hint]
+                    possible_guesses = get_hg(guess, hint, gwords) 
                 else:
                     possible_guesses = gwords[i+1:]
-                score, next_score = brute_force_wordle(wordlist, possible_guesses, move=move+1, history=tmp_history, hard=hard, limit=limit, checkthree=checkthree, order=order)
-                #if score > limit:
-                #    print(f"{score}: {next_score}")
+                score, next_score = brute_force_wordle(wordlist, possible_guesses, move=move+1, history=tmp_history, hard=hard, limit=limit, checkthree=checkthree, order=order, fixed_second=fixed_second)
                 worst_score = max(worst_score, score)
                 next_scores[hint] = next_score
                 if worst_score > limit:
@@ -1864,38 +1343,24 @@ def brute_force_wordle(bwords, gwords, move=1, history=[], hard=False, limit=69,
         if worst_score < best_score:
             best_score = worst_score
             solution = next_scores
-            if worst_score <= limit: # Should probably read: worst_score <= limit.  If I'm looking for ANY solution within the limit.  Basically, I found a good enough word.  No need to find the best!
-                # It's ugly, but this means we've found a solution, right?
-                if rmove <= 2 or (checkthree and rmove <= 4):
+            if worst_score <= limit:  
+                if rmove <= 2 or (checkthree and rmove <= 3):
                     smoves[rmove][key] = guess
                 return best_score, solution
     if rmove <= 2 and best_score > limit:
         if rmove == 2:
-            #move4_count += 1
             print("%s ~ ~%s" % (best_score, solution))
         moves[rmove][key] = True
     elif best_score > limit:
-        #move3_count += 1
         print("%s, %s ~ ~%s" % (move, best_score, solution))
-        if checkthree and rmove <= 4:
+        if checkthree and rmove <= 3:
             moves[rmove][key] = True
-    '''
-    if not solution: 
-        if move == limit - 1:
-            move5[key] = True
-    elif move == limit - 2 and best_score > limit:
-            move4_count += 1
-            move4[key] = True
-            print("%s ~ ~%s" % (best_score, solution))
-        #return best_score, (move, 'infinity', ",".join(bwords), history)
-    '''
     return best_score, solution
 
-zwords = pickle.load(open("zwords.pickle", "rb")) # Some random and some of the better words first... for, yea, better guessing.
-#zwords = pickle.load(open("zwords2.pickle", "rb")) 
-#score, best = brute_force_wordle(official_goals, zwords, move=1, limit=4) # I actually know that 5 is enough!
-#pickle.dump((score, best), open("final_solution_in_4.pickle", 'wb'))
-#score, best = pickle.load(open("final_solution_in_5.pickle", 'rb'))
+# To my surprise, the .pickle takes 102K memory whereas the .txt takes up 77K.  #Learning
+#zwords = pickle.load(open("zwords.pickle", "rb"))
+
+# Cute, so it can stay.  :- p
 print()
 print()
 print("-- -- --")
@@ -1903,314 +1368,13 @@ print("Solving all words.")
 print("-- -- --")
 print()
 print()
-#scorea, besta = brute_force_wordle(words, zwords, move=1, limit=6) # I know I can solve it within 8 moves.
-#pickle.dump((scorea, besta), open("final_solution_all_in_6.pickle", 'wb'))
+#score, best = brute_force_wordle(words, zwords, move=1, limit=6)
+#score, best = brute_force_wordle(zwords, zwords, move=1, limit=6, fixed_start='swift', fixed_second='lover', checkthree=False, order=True)
 
-hw3 = ['zills', 'maxes', 'gages', 'pents', 'lamer', 'jefes', 'memes', 'fents', 'namer', 'bases', 'zests', 'mages', 'peeps', 'vives', 'waxes', 'yeses', 'pixes', 'waker', 'loges', 'jells', 'zexes', 'games', 'faxes', 'waxer', 'waffs', 'waler', 'tills', 'bills', 'vises', 'wizes', 'maker', 'tates', 'faffs', 'mills', 'vells', 'vills', 'bayes', 'eases', 'rares', 'sages', 'wills', 'fames', 'zerks', 'dills', 'gills', 'hajes', 'serks', 'babes', 'tawer', 'river', 'faves', 'fanes', 'pills', 'jakes', 'lills', 'yexes', 'mazer', 'kexes', 'nills', 'gazes', 'sates', 'pizes', 'pipes', 'lawer', 'mazes', 'loves', 'wawes', 'fills', 'sazes', 'kills', 'fezes', 'tests', 'seeps', 'sills', 'sakes', 'fests', 'zezes', 'wises', 'zaxes', 'jaker', 'hazes', 'fazes', 'leges', 'yills', 'jives', 'tents', 'fazed', 'mells', 'waqfs', 'pests', 'hills', 'fakes', 'vaxes', 'janes', 'faked', 'taver', 'wiver', 'viver', 'raker', 'rills', 'wakfs', 'laxer', 'leves', 'cills', 'gares', 'wafer', 'jills', 'james']
-#score, best = brute_force_wordle(hills, zwords, move=1, hard=True, limit=6) # I actually know that 5 is enough!
-#score, best = brute_force_wordle(hw3, zwords, move=1, hard=True, limit=6) # I actually know that 5 is enough!
+# An example of one of the hard word sets I was working with.  Heck, why not leave it in xD
+#hw3 = ['zills', 'maxes', 'gages', 'pents', 'lamer', 'jefes', 'memes', 'fents', 'namer', 'bases', 'zests', 'mages', 'peeps', 'vives', 'waxes', 'yeses', 'pixes', 'waker', 'loges', 'jells', 'zexes', 'games', 'faxes', 'waxer', 'waffs', 'waler', 'tills', 'bills', 'vises', 'wizes', 'maker', 'tates', 'faffs', 'mills', 'vells', 'vills', 'bayes', 'eases', 'rares', 'sages', 'wills', 'fames', 'zerks', 'dills', 'gills', 'hajes', 'serks', 'babes', 'tawer', 'river', 'faves', 'fanes', 'pills', 'jakes', 'lills', 'yexes', 'mazer', 'kexes', 'nills', 'gazes', 'sates', 'pizes', 'pipes', 'lawer', 'mazes', 'loves', 'wawes', 'fills', 'sazes', 'kills', 'fezes', 'tests', 'seeps', 'sills', 'sakes', 'fests', 'zezes', 'wises', 'zaxes', 'jaker', 'hazes', 'fazes', 'leges', 'yills', 'jives', 'tents', 'fazed', 'mells', 'waqfs', 'pests', 'hills', 'fakes', 'vaxes', 'janes', 'faked', 'taver', 'wiver', 'viver', 'raker', 'rills', 'wakfs', 'laxer', 'leves', 'cills', 'gares', 'wafer', 'jills', 'james']
 
-#_,_,_, ww = pickle.load(open("hw3_full_sols_words.pickle", 'rb'))
-#ww, diffs = pickle.load(open("word_difficulties.pickle", "rb"))
-
-ww, diffs = pickle.load(open("word_difficulties3.pickle", "rb")) 
-rww, _,  _ = pickle.load(open("rww2_and_ww.pickle", "rb")) # rww2, rww, ww
-
-#start = time.time()
-#score, best = brute_force_wordle(list(set(ww[2] + ww[1] + ww[19])), zwords, move=1, limit=6, fixed_start='salet', hard=True)
-#end = time.time()
-#print(f"It took {end - start} seconds.")
-
-# What if for each word, I look for an unsatisfiable core?
-#>>> ww[7] = [w for w in words if w[1:]== 'ills']                                                          
-
-def get_ww_diff(word, ww, s=None):
-    sw = []
-    for i, wl in ww.items():
-        if s:
-            if s == i:
-                continue
-            wl = list(set(ww[s] + wl))
-        l = len(wl)
-        score = dscore_hint_distribution(word, wl)
-        sw.append( (score / l, score, i) )
-    if s:
-        wl = ww[s]; l = len(wl); score = dscore_hint_distribution(word, wl)
-        return [(score / l, score, s)] + sorted(sw) 
-    return sorted(sw)
-
-if False:
-    diffs = dict()
-    for word in words:
-        diffs[word] = get_ww_diff(word, ww, 7)
-    pickle.dump( (ww, diffs), open("word_difficulties3.pickle", 'wb'))
-
-# atm, on DELL, the top is easy and the bottom is hard.
-# I'll do the same from HP but in the opposite direction
-# Okay.  I should just solve hard first as it's faster and less reduntant
-
-def dumpunsolved(unsolved):
-    pickle.dump(unsolved, open("unsolved.pickle", "wb"))
-def updateunsolved(unsolved2):
-    #unsolved2 = pickle.load(open("unsolved.pickle", 'rb'))
-    for word, info in unsolved2.items():
-        if not word in unsolved: 
-            unsolved[word] = info
-    #dumpunsolved(unsolved)
-def updateindices(solved_indices2):
-    #solved_indices2 = pickle.load(open("solved_indices.pickle", "rb"))
-    for word, indices in solved_indices2.items():
-        if word in solved_indices: 
-            if len(solved_indices[word]) < len(indices):
-                solved_indices[word] = indices
-        else:
-            solved_indices[word] = indices
-    #pickle.dump(solved_indices, open("solved_indices.pickle", "wb"))
-#def saveprogress(unsolved):
-#    updatemoves()
-#    updateindices()
-#    updateunsolved(unsolved)
-
-def dumpdata():
-    pickle.dump((moves, smoves, unsolved, solved_indices), open("sdata2.pickle", 'wb'))
-
-def saveprogress():
-    moves2, smoves2, unsolved2, solved_indices2 = pickle.load(open("sdata2.pickle", 'rb'))
-    updatemoves(moves2)
-    updatemoves(smoves2)
-    updateindices(solved_indices2)
-    updateunsolved(unsolved2)
-    dumpdata()
-
-#>>> len(words) / 4
-#3243.0
-inc = int(len(words) / 4)
-words1 = words[:inc]; del words1[words1.index('puppy')]; words1.insert(0, 'puppy'); del words1[words1.index('aider')]; words1.insert(1, 'aider'); del words1[words1.index('crane')]; words1.insert(0, 'crane')
-words2 = words[inc:2*inc]; del words2[words2.index('fuffy')]; words2.insert(0, 'fuffy'); del words2[words2.index('deair')]; words2.insert(1, 'deair')
-words3 = words[2*inc:3*inc]; del words3[words3.index('nunny')]; words3.insert(0, 'nunny'); del words3[words3.index('oared')]; words3.insert(0, 'oared')
-words4 = words[3*inc:4*inc]; del words4[words4.index('yuppy')]; words4.insert(0, 'yuppy'); del words4[words4.index('redia')]; words4.insert(1, 'redia'); del words4[words4.index('salet')]; words4.insert(0, 'salet');
-'''
-del zwords[zwords.index('zanja')]; zwords.insert(5, 'zanja')
-del zwords[zwords.index('zymic')]; zwords.insert(5, 'zymic')
-del zwords[zwords.index('vying')]; zwords.insert(5, 'vying')
-del zwords[zwords.index('swift')]; zwords.insert(0, 'swift')
-del zwords[zwords.index('toner')]; zwords.insert(0, 'toner')
-del zwords[zwords.index('ducal')]; zwords.insert(0, 'ducal')
-del zwords[zwords.index('loper')]; zwords.insert(0, 'loper')
-del zwords[zwords.index('moral')]; zwords.insert(0, 'moral')
-del zwords[zwords.index('omber')]; zwords.insert(0, 'omber')
-#del zwords[zwords.index('oared')]; zwords.insert(0, 'oared')
-#del zwords[zwords.index('hoaed')]; zwords.insert(0, 'hoaed')
-#del zwords[zwords.index('lemur')]; zwords.insert(0, 'lemur')
-del zwords[zwords.index('salet')]; zwords.insert(13, 'salet')
-'''
-bsol = pickle.load(open("swift_bsol_words.pickle", 'rb'))
-#sbwords2 = set(get_sol_entries(bsol['ybbbb']))
-#score, best = brute_force_wordle(zwords, zwords, move=1, limit=8, fixed_start='swift', checkthree=False, order=True)
-from random import shuffle
-if False:
-    #words.reverse()
-    #unsolved = pickle.load(open("unsolved.pickle", "rb")) #dict()
-    solved = dict()
-    #solved_indices = pickle.load(open("solved_indices.pickle", "rb"))
-    ww.update(rww) # zymic is getting so close I wanted to set it up to cruise on to a full solution!
-    lww = len(ww)
-    #words4.reverse() 
-    #for word in words4: # later to be words, lol
-    zwords = [t[1] for t in sorted([(score_hint_distribution(word, ww[7]), word) for word in words])]
-    for word in zwords[:10]:#, 'glyph', 'gyppy']: # gyppy is one of the worst words!
-    #for word in ['vifda', 'zanja', 'skint']: # Some of the best words!
-        score, best = None, None
-        if word in unsolved:
-            continue
-        bwords = set()
-        indices = list()
-        broken = False
-        tryHeuristic = False#True
-        hard = True
-        num = 0
-        wdiff = diffs[word]
-        solved_indices[word] = solved_indices.get(word, [])
-        solved_indices['swift'] = []
-        #solved_indices['swift'] = [33, 51, 46, 38, 39, 40, 52, 53, 36, 55, 34, 35, 37, 41, 42, 43]
-        #wdiff.reverse()
-        #zwords.reverse()
-        #for i in [7, 27]: #diffs[word]: # Now it will continue to step through the indices for every single word's set!
-        #lrww = list(rww.keys())[2:]
-        #for i in [i for score_avg, score_count, i in wdiff] + lrww: #list(rww.keys()): #diffs[word]: # Now it will continue to step through the indices for every single word's set!
-        #inds = [i for score_avg, score_count, i in wdiff] + list(rww.keys()) #diffs[word]: # Now it will continue to step through the indices for every single word's set!
-        #ainds = [31, 32]
-        #binds = [33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57]
-        #binds = [33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 57, 56]
-        #binds = [34, 36, 33, 35, 56, 51, 57, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 52, 53, 54, 55]
-        #binds =  [28, 33, 51, 46, 38, 39, 40, 52, 53, 36, 55, 34, 35, 37, 41, 42, 43, 44, 45, 47, 48, 49, 50, 54, 56, 57]
-        binds = [7]
-        #inds.reverse()
-        #shuffle(binds)
-        for i in binds:
-        #for i in [28]:
-            num += 1
-            print(f"++ Starting index {num}/{lww} of {word}. ({indices})")
-            ws = set(ww[i])
-            indices.append(i); 
-            bwords.update(ww[i])
-            if i in solved_indices[word]:
-                continue
-            #if ws.issubset(bwords):
-            #    continue
-            count = 0
-            if tryHeuristic:
-                best = compute_all_wordles(word, bwords, move=1, limit=6)
-                if check_results(best):
-                    solved_indices[word].append(i)
-                    print(f"- solved by greedy strategy.")
-                    continue
-                tryHeuristic = False
-            sbwords = sorted(bwords); lbw = len(sbwords)
-            score, best = brute_force_wordle(sbwords, zwords, move=1, limit=6, fixed_start=word, hard=hard, checkthree=(lbw < 300), order=True)
-            #if hard and score > 6: # idea: if it can be solved in hard mode, it can be solved in easy mode.  Only try easy mode when hard is broken!
-            #    print("--> easy") # ... and then in remaining loops, no point in bothering with hard!
-            #    hard = False
-            #    score, best = brute_force_wordle(list(bwords), zwords, move=1, limit=6, fixed_start=word)
-            if score > 6:
-                broken = True
-                unsolved_words = bwords - set([r[1] for r in retrieve_all_results(best)])
-                unsolved[word] = (score, indices, unsolved_words, best)
-                break
-            else:
-                solved_indices[word].append(i)
-                print(f"- The score is {score}.")
-        if not broken:
-            solved[word] = (score, indices, best)
-        print(f"*** {word} is {'NOT' if not broken else ''} broken!")
-
-# >>> retrieve_all_results(sol['ybbbb']['bbbgb']['bbbbg'])
-#sol = pickle.load(open("swift_sol_words.pickle", 'rb'))
-
-# omfg, the following worked!
-#>>> get_fails(sol['ybbbb']['bbbgb'])[0]
-#{'bbbbg': {'hexes', 'veges', 'zexes', 'zezes', 'kexes', 'vexes'}, 'bgbyg': {'doves', 'doxes'}, 'bgbbg': {'coxes', 'nones', 'coses', 'jones', 'coves', 'voces'}}
-#sbwords = get_sol_entries(sol['ybbbb']['bbbgb']['bbbbg'])
-#score, best = brute_force_wordle(sbwords, zwords, move=4, limit = 6, hard=False, checkthree=True)
-#best2 = fixup_history(best, ['swift', 'pareu', 'molds'])
-#>>> sbwords =  get_sol_entries(sol['ybbbb']['bbbgb']['bgbyg'])
-#>>> sbwords
-#['bodes', 'codes', 'nodes', 'dobes', 'doges', 'doses', 'doves', 'doxes', 'dozes']
-#>>> 
-#Oh, holy shit, this killed it!
-#sbwords =  get_sol_entries(sol['ybbbb']['bbbgb']) # ... len 156
-
-#sbwords = get_sol_entries(sol['ybbbb']['bgbgb']) # ... 
-#>>> get_fails(sol['ybbbb']['bgbgb'])[0]
-#{'bybbb': {'laxes', 'lazes'}, 'bbbyb': {'mazes', 'maxes'}}
-#sbwords = get_sol_entries(sol['ybbbb']['bgbgb']['bybbb']) # failed! whoa
-#['easel', 'dales', 'eales', 'gales', 'hales', 'kales', 'yales', 'lades', 'lased', 'lakes', 'lanes', 'lases', 'laxes', 'lazes', 'laves', 'vales']
-#sbwords = get_sol_entries(sol['ybbbb']['bgbgb']['bbbyb']) # ALSO FAILED!
-#['dames', 'hames', 'james', 'kames', 'games', 'mages', 'makes', 'mases', 'maxes', 'mazes', 'manes', 'mased', 'names']
-#zwords = [t[1] for t in sorted([(score_hint_distribution(word, sbwords), word) for word in words])]
-#score, best = brute_force_wordle(sbwords, zwords, move=3, limit = 7, hard=False, checkthree=True, history = ['swift', 'pareu'])
-
-#score, best = brute_force_wordle(sbwords, zwords, move=3, limit = 6, hard=False, checkthree=True, history = ['swift', 'pareu'])
-#sbwords = get_sol_entries(sol['bbbbb']['bbbby']['bgbyb']) # -- yay
-#sbwords = get_sol_entries(sol['bbbbb']['bbbby']['bgbbb']) # -- yay
-#sbwords = get_sol_entries(sol['bbbbb']['bbbyy']['bgbbg']) # len 12 ... NO
-#sbwords = get_sol_entries(sol['bbbbb']['bbbyy']) # ... YES!
-#score, best = brute_force_wordle(sbwords, zwords, move=3, limit = 6, hard=False, checkthree=True, history = ['swift', 'rayle'])
-
-#sbwords = get_sol_entries(sol['ybybb']['ybbbb']) # len 30 ... YES!
-
-#>>> get_fails(bsol['ybbby'])[0]
-#{'bbbgy': {'kests', 'zests', 'vents', 'tests', 'tents'}, 'bbyyy': {'tajes', 'taxes'}}
-#sbwords = get_sol_entries(sol['ybbby']['bbyyy']) # len 30, too . . . YES!
-#sbwords = get_sol_entries(sol['ybbby']['bbbgy']) # len 49. 
-
-# Hold on, it seems as if I'll solve all of ['ybbby'] faster... wtf
-# Yeah, it worked.
-#sbwords = get_sol_entries(sol['ybbby']) # len 562
-
-#zwords = [t[1] for t in sorted([(score_hint_distribution(word, sbwords), word) for word in words])]
-#score, best = brute_force_wordle(sbwords, zwords, move=1, limit=6, hard=False, checkthree=True, fixed_start='swift')
-#score, best = brute_force_wordle(sbwords, zwords, move=3, limit=6, hard=False, checkthree=True, history = ['swift', 'orate'], order=True)
-bsol = pickle.load(open("swift_bsol_words.pickle", 'rb'))
-sbwords = get_sol_entries(bsol['ybbbb'])
-print(len(sbwords))
-#score, best = brute_force_wordle(sbwords, zwords, move=1, limit=7, hard=False, checkthree=True, fixed_start='swift', order=True)
-
-#score, best = brute_force_wordle(zwords, zwords, move=1, limit=6, fixed_start='swift', checkthree=True, order=True)
-
-# Now that I ordered everything from move 2+
-# I might as well just try the greedy-first brute-force... meh.
-
-## Okay, the above is actually seeming likely to solve everything for Zymic.
-## Oddly, Zymic was broken by some subset during greedy but now is solving it with more... weird.  Well, it's non-deterministic.  The brute-force search is the deterministic one, in terms of the decision procedure result.
-#>>> all_ww = list(set([w for wl in ww.values() for w in wl]))
-#>>> remain_ww = dict((i, [c[0] for c in retrieve_all_results(si_sols3) if c[1] == i and not c[0] in all_ww]) for i in range(2,9))
-#>>> 
-#>>> Counter([c[1] for c in retrieve_all_results(si_sols3)])
-#Counter({4: 6451, 5: 5113, 3: 763, 6: 614, 2: 21, 7: 7, 8: 3})
-#>>> [len(remain_ww[i]) for i in range(2,9)]
-#[20, 687, 6095, 4745, 378, 2, 0]
-# Okay, if by chance Zymic beats the hard set, for now, I'll just go in reverse order over everything in the Salet solution that's not in ww.
-#pickle.dump((rww, ww), open("rww_and_ww.pickle", "wb"))
-#pickle.dump((rww2, rww, ww), open("rww2_and_ww.pickle", "wb"))
-'''
->>> rww[31] = remain_ww[7] + remain_ww[6][:150]
->>> rww[32] = remain_ww[6][150:]
->>> for in range(33, 33+13):
->>>     rww[i] = remain_ww[5][(i - 33) * 365: (i - 33 + 1) * 365]
->>> for i in range(46, 46+23):
->>>     rww[i] = remain_ww[4][(i - 46) * 265: (i - 46 + 1) * 265]
->>> for i in range(69, 69+3):
->>>     rww[i] = remain_ww[3][(i - 69) * 229: (i - 69 + 1) * 229]
->>> rww[72] = remain_ww[2]
->>> len(all_rww)
->>> 11927
->>> wordset == set(all_rww + all_ww)
->>> True
->>> set(all_rww) & set(all_ww)
->>> set()
-
-# I took the unsolved entries from a global Swift solution and brooke them up into etnries prior to rww... cuz Swift is almost done with the basic wws
->>> len(get_sol_entries(bsol['ybbbb']))                                                                                                                                                                            
-2133                                                                                                                                                                                                               
->>> len(get_sol_entries(bsol['ybbby']))                                                                                                                                                                            
-562    
-
-# The smol one
->>> rww2[31] = a[:256]
->>> rww2[32] = a[256:] 
-
-# The large one
-dict_keys([31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59])
-# 27 * 79 size bins
-
-# So if it gets to 59, I'm done ;D
->>> for i, wl in rww.items():
-    ...  rww2[i+30] = rww[i]
-    ... 
-
-'''
-
-if False:
-    solvers = []
-
-    for word in ['chynd'] + list((wordset - set(['chynd']))):
-        print(f"Trying {word}.")
-        #sol = compute_all_wordles(word, hills)
-        sol = compute_all_wordles_hard(word, hills, words, lookahead=-1)
-        if check_results(sol):
-            print(f"{word} solves *ILLS with {', '.join(sorted(f'{n} : {c}' for n, c in Counter([c[1] for c in retrieve_all_results(sol_dicho)]).items()))}.")
-            solvers.append((word, sol))
-
-#sol = pickle.load(open("chynd_sol_words.pickle", 'rb')); f, ff = get_fails(sol); hw = list(set(hills) | f['bbbbb'])
-#sol2 = compute_all_wordles('chynd', hw, limit=9)
-#hw2 = [r[0][-1] for r in retrieve_all_results(sol2) if r[1] >= 5 and r[0][1] == 'aleft']; hw2 = list(set(hw2 + hills))
-#pickle.dump(sol0, open("brock_sol_words.pickle", 'wb'))
-#{'bbbbb': {'wawes', 'zills', 'vexes', 'sazes', 'saves', 'mimes', 'eaves', 'memes', 'waxes', 'zests', 'peeps', 'vives', 'seeps', 'zexes', 'faxes', 'meves', 'zaxes', 'jests', 'fazes', 'wizes', 'jives', 'vells', 'vills', 'mells', 'wills', 'faves'}, 'bybbb': {'viver', 'rares', 'waxer', 'laxer', 'waler', 'lamer', 'mazer', 'tawer', 'namer', 'taver', 'river', 'lawer', 'wafer', 'wiver', 'gares'}, 'bbybb': {'golly', 'lolly'}, 'bbbyy': {'kacks', 'jacks'}}
-#pickle.dump(sol0, open("lovie_sol_words.pickle", 'wb'))
-#{'bbbyb': {'sings', 'jinks', 'wings', 'binks'}, 'bbbby': {'waker', 'zexes', 'games', 'zerks', 'janes', 'fazed', 'tents', 'pests', 'sages', 'zaxes', 'fezes', 'bases', 'tests', 'jakes', 'sates', 'eases', 'fazes', 'fames', 'pents', 'faxes', 'faked', 'fakes', 'serks', 'sakes', 'zests', 'mages', 'fents', 'fanes', 'zezes', 'bayes', 'fests', 'seeps', 'jefes', 'yexes', 'maxes', 'maker', 'peeps', 'tates', 'james', 'babes', 'yeses', 'mazes', 'hajes', 'hazes', 'sazes', 'wawes', 'waxes'}, 'bbbbb': {'jumps', 'sacks', 'jacks', 'zacks', 'mumps'}, 'bbbyy': {'cines', 'zines'}, 'ybbby': {'wells', 'jells'}, 'bgbby': {'cowed', 'goxes', 'oozes', 'ooses', 'yowes', 'cozed'}, 'bgbbb': {'jooks', 'gooks'}, 'ybbyb': {'sills', 'fills', 'zills', 'jills', 'pills'}}
-#sol_vifda = compute_all_wordles('vifda', words, limit=9); counter = 0; sol_jived = compute_all_wordles('jived', words, limit=9); counter = 0; sol_lever = compute_all_wordles('lever', words, limit=9); counter = 0; sol_brink = compute_all_wordles('brink', words, limit=9); counter = 0; sol_skint = compute_all_wordles('skint', words, limit=9)
-#pickle.dump((sols, fails, hw5, ww), open("hw3_full_sols_words.pickle", 'wb')) # Actually 4, I fucked up.
+# Below are the supposedly challenging word sets I gathered to try to break Wordle.
 '''
 *ECKS, *ESTS, *UMPS, *EALS, *OOKS, *OCKS, *ELLS, *ARKS, *ERKS, *ENTS, *ERRY, *OLLY, *IGHT, *AILS, A**FS, A**ES, A**ED, A**AS, O**ED, O**ES, A**AR, I**ES, I**ER, 
 >>> ww[1] = [w for w in words if w[1:] == 'ecks']                                                         
@@ -2241,50 +1405,133 @@ if False:
 >>> ww[27] = [w for w in words if w[1:3] == 'il' and w[4] == 's']
 >>> ww[28] = [w for w in words if w[3:] == 'es'] 
 '''
-## Chosen via various word_classes....  Maybe over-kill, right?
-## But I got sick of NOT failing my basic solvers.
-#    hw2 = ['gages', 'waqfs', 'tills', 'jives', 'faffs', 'fills', 'leges', 'vises', 'vaxes', 'kills', 'vives', 'waffs', 'pills', 'dills', 'zaxes', 'pipes', 'tests', 'wises', 'leves', 'wizes', 'pixes', 'loves', 'jaker', 'zests', 'pizes', 'hills', 'kexes', 'zills', 'nills', 'wakfs', 'yills', 'loges', 'jills', 'memes', 'cills', 'mills', 'gazes', 'lills', 'sills', 'gills', 'rills', 'babes', 'raker', 'wills', 'bills', 'vells', 'vills', 'jells']
-    # Hadda make a new one based on brock and lovie
-#    hw3 = ['zills', 'maxes', 'gages', 'pents', 'lamer', 'jefes', 'memes', 'fents', 'namer', 'bases', 'zests', 'mages', 'peeps', 'vives', 'waxes', 'yeses', 'pixes', 'waker', 'loges', 'jells', 'zexes', 'games', 'faxes', 'waxer', 'waffs', 'waler', 'tills', 'bills', 'vises', 'wizes', 'maker', 'tates', 'faffs', 'mills', 'vells', 'vills', 'bayes', 'eases', 'rares', 'sages', 'wills', 'fames', 'zerks', 'dills', 'gills', 'hajes', 'serks', 'babes', 'tawer', 'river', 'faves', 'fanes', 'pills', 'jakes', 'lills', 'yexes', 'mazer', 'kexes', 'nills', 'gazes', 'sates', 'pizes', 'pipes', 'lawer', 'mazes', 'loves', 'wawes', 'fills', 'sazes', 'kills', 'fezes', 'tests', 'seeps', 'sills', 'sakes', 'fests', 'zezes', 'wises', 'zaxes', 'jaker', 'hazes', 'fazes', 'leges', 'yills', 'jives', 'tents', 'fazed', 'mells', 'waqfs', 'pests', 'hills', 'fakes', 'vaxes', 'janes', 'faked', 'taver', 'wiver', 'viver', 'raker', 'rills', 'wakfs', 'laxer', 'leves', 'cills', 'gares', 'wafer', 'jills', 'james']
-#    hw4 = ['mazes', 'yards', 'yeses', 'hazer', 'wakfs', 'mills', 'vells', 'pipes', 'kawas', 'goxes', 'loves', 'fakes', 'gawks', 'balas', 'sooks', 'sates', 'taver', 'fates', 'poods', 'fuffs', 'fanes', 'lalls', 'mazer', 'poofs', 'haves', 'zooks', 'james', 'gamer', 'zaxes', 'raker', 'sacks', 'waxer', 'zexes', 'dazed', 'daled', 'jaded', 'burgs', 'waxes', 'gaffs', 'fines', 'rezes', 'jacks', 'kexes', 'wents', 'coyed', 'konks', 'lamer', 'vests', 'japes', 'fulls', 'songs', 'sails', 'kills', 'fezes', 'soops', 'fames', 'fazed', 'faxed', 'gives', 'verry', 'tills', 'sools', 'burrs', 'dawks', 'pizes', 'razer', 'jefes', 'kooks', 'mazed', 'herry', 'fests', 'keeks', 'faces', 'raxes', 'galls', 'wafer', 'foxes', 'faves', 'maxed', 'cools', 'waker', 'hakes', 'pangs', 'wawas', 'zills', 'noons', 'rills', 'tawer', 'vills', 'taxes', 'zoons', 'tests', 'rarks', 'wacks', 'puffs', 'oozes', 'jager', 'jests', 'teats', 'fents', 'famed', 'hills', 'jails', 'bayes', 'warps', 'gests', 'rexes', 'rager', 'hahas', 'pests', 'gazes', 'cills', 'viver', 'fazes', 'sowls', 'wakas', 'wolly', 'kacks', 'boded', 'wawes', 'babes', 'rares', 'ealed', 'lolly', 'gowls', 'maker', 'wases', 'fades', 'river', 'laver', 'fader', 'gores', 'games', 'wonks', 'leges', 'coxed', 'eases', 'lowes', 'boxed', 'plaps', 'zezes', 'jills', 'loges', 'geeps', 'bases', 'pixes', 'lills', 'faked', 'tents', 'gazer', 'leves', 'lulls', 'nines', 'galas', 'yills', 'jaggs', 'wizes', 'sinks', 'vives', 'mases', 'fares', 'sakes', 'mells', 'zacks', 'bakes', 'gares', 'zerks', 'jakes', 'fills', 'dazes', 'jades', 'doxes', 'vises', 'hajes', 'bills', 'seeps', 'zines', 'walls', 'sills', 'gades', 'sages', 'fangs', 'dills', 'barks', 'worts', 'yaffs', 'janes', 'ooses', 'gaged', 'sorts', 'sagas', 'pases', 'nills', 'souks', 'jouks', 'pages', 'fards', 'jells', 'namer', 'dazer', 'balls', 'yages', 'toped', 'laxer', 'jaker', 'jafas', 'paper', 'papes', 'woops', 'jarks', 'wakes', 'mages', 'nongs', 'waffs', 'rajes', 'memes', 'waler', 'faffs', 'baked', 'yexes', 'seats', 'faxes', 'fight', 'hight', 'rores', 'gapes', 'waqfs', 'vases', 'gases', 'jolts', 'jives', 'tajes', 'maxes', 'sazes', 'cozed', 'hazes', 'vaxes', 'gecks', 'wiver', 'eaves', 'pills', 'vades', 'winks', 'tozed', 'gages', 'babas', 'gazed', 'gills', 'zests', 'jagas', 'serks', 'jooks', 'kecks', 'slaps', 'pents', 'dopes', 'weeks', 'jarps', 'wills', 'wises', 'paxes', 'tolts', 'peeps', 'tates', 'lawer']
- 
-if False:
-    word_distros = pickle.load(open("word_distros.pickle", "rb"))
-    #hills_solvers = [t[0] for t in pickle.load(open("hills_solvers.pickle", 'rb'))]
-    #hills_solvers = [t[0] for t in pickle.load(open("hills_solvers2.pickle", 'rb'))]
-    hills_solvers = [t[0] for t in pickle.load(open("hills_solvers3.pickle", 'rb'))]
-    _, _, hw5 = pickle.load(open("hw4_full_sols_words.pickle", 'rb'))
-    solvers = []
-    for word in hills_solvers[28:]:
-        count = 0
-        print(f"Trying {word}.")
-        sol = compute_all_wordles(word, hw5, limit=9)
-        if check_results(sol):
-            print(f"{word} solves *ILLS++ with {', '.join(sorted(f'{n} : {c}' for n, c in Counter([c[1] for c in retrieve_all_results(sol)]).items()))}.")
-            solvers.append((word,  sol))
 
-'''
-# So, it seems that hw2 breaks the hard ones.
->>> for i, word in enumerate([r[0] for r in solvers]):
-    ...  sols[word] = compute_all_wordles_hard(word, hw2, words, lookahead=-1)
-    ... 
-    Solved bgggg:lills on move 7 with guesses: ['vozhd', 'ferny', 'scamp', 'twigs', 'bilks', 'jills'].
-    Solved bgggg:zills on move 8 with guesses: ['chevy', 'brand', 'skimp', 'gifts', 'jills', 'lills', 'wills'].
-    Solved ggggg:wills on move 7 with guesses: ['chevy', 'brand', 'skimp', 'gifts', 'jills', 'lills', 'wills'].
-    Solved ggggg:pills on move 7 with guesses: ['zanja', 'berth', 'comfy', 'disks', 'gills', 'lills', 'pills'].
-    Solved bgggg:wills on move 9 with guesses: ['zanja', 'berth', 'comfy', 'disks', 'gills', 'lills', 'pills', 'vills'].
-    Solved ggggg:vills on move 8 with guesses: ['zanja', 'berth', 'comfy', 'disks', 'gills', 'lills', 'pills', 'vills'].
-    Solved bgggg:zills on move 7 with guesses: ['vughy', 'fremd', 'scant', 'lowps', 'bilks', 'jills'].
-    >>> for k, v in sols.items():
-        ...  if check_results(v):
-            ...   print(k)
-            ... 
-            >>> [r for r in retrieve_all_results(sols['vughy']) if r[1] > 6]
-            [(['vughy', 'fremd', 'scant', 'lowps', 'bilks', 'jills', 'zills'], 7)]
-            >>> [r for r in retrieve_all_results(sols['zanja']) if r[1] > 6]
-            [(['zanja', 'berth', 'comfy', 'disks', 'gills', 'lills', 'pills'], 7), (['zanja', 'berth', 'comfy', 'disks', 'gills', 'lills', 'pills', 'vills', 'wills'], 9), (['zanja', 'berth', 'comfy', 'disks', 'gills', 'lills', 'pills', 'vills'], 8)]
-            >>> [r for r in retrieve_all_results(sols['chevy']) if r[1] > 6]
-            [(['chevy', 'brand', 'skimp', 'gifts', 'jills', 'lills', 'wills', 'zills'], 8), (['chevy', 'brand', 'skimp', 'gifts', 'jills', 'lills', 'wills'], 7)]
-            >>> [r for r in retrieve_all_results(sols['vozhd']) if r[1] > 6]
-            [(['vozhd', 'ferny', 'scamp', 'twigs', 'bilks', 'jills', 'lills'], 7)]
-'''
+#ww, diffs = pickle.load(open("word_difficulties3.pickle", "rb")) 
+
+# For a given word, order the had word set indexes based on how much the word can split them
+# I don't fully remember why I decided to place the easiest first.  I think initially it was the other way around and I changed my mind /(^3^)\
+# Optionally, always place 7 := *ILLS first.
+def get_ww_diff(word, ww, s=None):
+    sw = []
+    for i, wl in ww.items():
+        if s:
+            if s == i:
+                continue
+            wl = list(set(ww[s] + wl))
+        l = len(wl)
+        score = dscore_hint_distribution(word, wl)
+        sw.append( (score / l, score, i) )
+    if s:
+        wl = ww[s]; l = len(wl); score = dscore_hint_distribution(word, wl)
+        return [(score / l, score, s)] + sorted(sw) 
+    return sorted(sw)
+
+# Generate the difficulty dictionary.
+if False:
+    diffs = dict()
+    for word in words:
+        diffs[word] = get_ww_diff(word, ww, 7)
+    pickle.dump( (ww, diffs), open("word_difficulties3.pickle", 'wb'))
+
+# Update the unsolved and solved word dictionaries.
+def updateunsolved(unsolved2):
+    for word, info in unsolved2.items():
+        if not word in unsolved: 
+            unsolved[word] = info
+
+def updateindices(solved_indices2):
+    for word, indices in solved_indices2.items():
+        if word in solved_indices: 
+            if len(solved_indices[word]) < len(indices):
+                solved_indices[word] = indices
+        else:
+            solved_indices[word] = indices
+
+# To facilitate updating the memory banks that are shared among a few procesess... Manually as dealing with read/write conflicts seemed annoying.
+def dumpdata():
+    pickle.dump((moves, smoves, unsolved, solved_indices), open("sdata2.pickle", 'wb'))
+
+def saveprogress():
+    moves2, smoves2, unsolved2, solved_indices2 = pickle.load(open("sdata2.pickle", 'rb'))
+    updatemoves(moves2)
+    updatemoves(smoves2)
+    updateindices(solved_indices2)
+    updateunsolved(unsolved2)
+    dumpdata()
+
+# Splitting the words up to parallelize the lazy way.
+# Also throwing in words that worst/best split the data to 'learn from' first.
+#>>> len(words) / 4
+#3243.0
+inc = int(len(words) / 4)
+words1 = words[:inc]; del words1[words1.index('puppy')]; words1.insert(0, 'puppy'); del words1[words1.index('aider')]; words1.insert(1, 'aider'); del words1[words1.index('crane')]; words1.insert(0, 'crane')
+words2 = words[inc:2*inc]; del words2[words2.index('fuffy')]; words2.insert(0, 'fuffy'); del words2[words2.index('deair')]; words2.insert(1, 'deair')
+words3 = words[2*inc:3*inc]; del words3[words3.index('nunny')]; words3.insert(0, 'nunny'); del words3[words3.index('oared')]; words3.insert(0, 'oared')
+words4 = words[3*inc:4*inc]; del words4[words4.index('yuppy')]; words4.insert(0, 'yuppy'); del words4[words4.index('redia')]; words4.insert(1, 'redia'); del words4[words4.index('salet')]; words4.insert(0, 'salet');
+
+# Code to try and collect smallish word sets that break each word (which ultimately discovered the winning word: 'swift').
+if False:
+    solved = dict()
+    #ww.update(rww) 
+    lww = len(ww)
+    for word in words1:
+        score, best = None, None
+        if word in unsolved:
+            continue
+        bwords = set()
+        indices = list()
+        broken = False
+        tryHeuristic = False#True
+        hard = True
+        num = 0
+        wdiff = diffs[word]
+        solved_indices[word] = solved_indices.get(word, [])
+        for i in [i for score_avg, score_count, i in wdiff]
+            num += 1
+            print(f"++ Starting index {num}/{lww} of {word}. ({indices})")
+            ws = set(ww[i])
+            indices.append(i); 
+            bwords.update(ww[i])
+            if i in solved_indices[word]:
+                continue
+            count = 0
+            # This is a relic from before I combined the greedy search with the brute-force solver
+            if tryHeuristic:
+                best = compute_all_wordles(word, bwords, move=1, limit=6)
+                if check_results(best):
+                    solved_indices[word].append(i)
+                    print(f"- solved by greedy strategy.")
+                    continue
+                tryHeuristic = False
+            sbwords = sorted(bwords); lbw = len(sbwords)
+            score, best = brute_force_wordle(sbwords, zwords, move=1, limit=6, fixed_start=word, hard=hard, checkthree=(lbw < 300), order=True)
+            if score > 6:
+                broken = True
+                unsolved_words = bwords - set([r[1] for r in retrieve_all_results(best)])
+                unsolved[word] = (score, indices, unsolved_words, best)
+                break
+            else:
+                solved_indices[word].append(i)
+                print(f"- The score is {score}.")
+        if not broken:
+            solved[word] = (score, indices, best)
+        print(f"*** {word} is {'NOT' if not broken else ''} broken!")
+
+# I'll end the file with present Zar's mettic wish.
+
+#Zetta :- 
+#    In an easy and relaxed manner, 
+#    in a healthy and positive way, 
+#    in its own perfect time, 
+#    for the highest good of all, 
+#    and with divine balance, 
+#    if you allow it, 
+#        I wish you the ongoing fulfillment of your needs, desires, dreams and fantasies, 
+#        possibly forms you haven't asked for or imagined.  
+#    If you do not allow it, 
+#        I wish this energy freely go wherever it is welcome and appreciated.
+
+# <3
+
+
+
