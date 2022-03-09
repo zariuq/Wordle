@@ -609,108 +609,27 @@ def get_pair_distribution2_hardmode(word1, word2):
             hints[hint1] = set()
     return hints
 
-if False:
-    pair_distro = {}
-    best = num_words
-    best_pair = ("fuck", "you")
-    for i1 in range(1000):
-        print(f"Beginning word #{i1}.  Current best is {best_pair} at score {best}. ")
-        for i2 in range(i1+1, 1000):
-            word1 = best_1k[i1]
-            word2 = best_1k[i2]
-            score = score_pair_distribution(word1, word2, words)
-            pair_distro[(word1, word2)] = score
-            if score < best:
-                best = score
-                best_pair = (word1, word2)
-                print(f"*** New best: {best_pair} at score {best}. ***")
-            print(f"{word1}, {word2} worst case bucket is {score}")
-    print(f"Beginning the worse words.")
-    for word1 in best_1k:
-        for word2 in worst_words:
-            score = score_pair_distribution(word1, word2, words)
-            pair_distro[(word1), (word2)] = score
-            # Best serai: [(174, 'serai', 'loans'), (189, 'serai', 'loast'), (189, 'serai', 'lotsa'),
-            print(f"{word1}, {word2} worst case bucket is {score}")
-
-if False:
-    salet_pair_distro = {}
-    hint_groups = get_hint_distribution_with_words('salet', words)
-    for hint, wordlist in hint_groups.items():
-        l = len(wordlist)
-        pair_list = []
-        best = num_words
-        for i1 in range(1000):
-            for i2 in range(i1+1, 1000):
-                word1 = best_1k[i1]
-                word2 = best_1k[i2]
-                score = score_pair_distribution(word1, word2, wordlist)
-                pair_list.append((score, ((word1), (word2))))
-                if score < best:
-                    best = score
-                    print(f"For {hint} of size {l}, {word1}, {word2} worst case bucket is {score}")
-        print(f"Hint {hint} can be reduced from {l} to {best}.")
-        pair_list = sorted(pair_list)
-        salet_pair_distro[hint] = pair_list[:100]
-
-# pickle.dump(pair_distro, open("pair_distro_parts_1-68.pickle", "wb"))
+# Looking at a partial comparison of "best first two moves".  As it's non-total, it was easy for me to find a better solution, replacing  'irons' with 'irony'. 
 #[(129, 'salet', 'irons'), (132, 'salet', 'noirs'), (132, 'salet', 'noris'), (132, 'solei', 'rants'), (132, 'solei', 'tarns'), (134, 'nates', 'reoil'), (134, 'tales', 'irons'), (136, 'setal', 'irons'), (136, 'setal', 'noris'), (144, 'nates', 'loirs'), (144, 'nates', 'loris'), (144, 'nates', 'roils'), (144, 'tales', 'noirs'), (144, 'tales', 'noris'), (145, 'canes', 'reoil'), (147, 'cates', 'irons'), (147, 'nates', 'soral'), (147, 'rates', 'sloan'), (147, 'rates', 'solan'), (147, 'setal', 'noirs'), (147, 'stoae', 'nirls'), (147, 'taces', 'irons'), (147, 'tares', 'sloan'), (147, 'tares', 'solan'), (149, 'cates', 'reoil'), (149, 'taces', 'reoil'), (152, 'canes', 'loirs'), (152, 'canes', 'loris'), (152, 'canes', 'roils'), (152, 'reais', 'sloan'), (152, 'solei', 'darts'), (155, 'slate', 'irons'), (155, 'slate', 'noirs')]
 # Best serai: [(174, 'serai', 'loans'), (189, 'serai', 'loast'), (189, 'serai', 'lotsa'),
 
-
-#pickle.dump(salet_pair_distro, open("salet_pair_distro.pickle", 'wb'))
-#salet_pair_distro = pickle.load(open("salet_pair_distro.pickle", 'rb'))
-
-#>>> pickle.dump(sol, open("tmp_hardwords.pickle", "wb"))
-#>>> hardwords
-#['balls', 'bells', 'bills', 'bolls', 'bulls', 'calls', 'cells', 'cills', 'colls', 'culls', 'dells', 'dills', 'dolls', 'dulls', 'falls', 'fells', 'fills', 'fulls', 'galls', 'gills', 'gulls', 'halls', 'hells', 'hills', 'hulls', 'jells', 'jills', 'jolls', 'kells', 'kills', 'lalls', 'lills', 'lolls', 'lulls', 'malls', 'mells', 'mills', 'molls', 'mulls', 'nills', 'nolls', 'nulls', 'palls', 'pells', 'pills', 'polls', 'pulls', 'rills', 'rolls', 'sells', 'sills', 'talls', 'tells', 'tills', 'tolls', 'vells', 'vills', 'walls', 'wells', 'wills', 'wulls', 'yells', 'yills', 'zills', 'bests', 'fests', 'gests', 'hests', 'jests', 'kests', 'lests', 'nests', 'pests', 'rests', 'tests', 'vests', 'wests', 'yests', 'zests']
-#hardsol = pickle.load(open("tmp_hardwords.pickle", "rb"))
-
-#!!! Aha!  
 #>>> score_pair_distribution('salet', 'irony', words)
 #127
-#>>> score_pair_distribution('salet', 'irons', words)
-#129
 
-# So salet, irons is the best least-bad pair.  Now I'd wanna find the best pair assuming salet is first?
-# Move 1 == salet.
-# So this process would deal with Move 2 and Move 3... or at least Move 2.
-# As while salet -> irons is the best case for its bucket, ybbbb, maybe there are better choices than irons for the other buckets! 
-
+# Counts for hint-buckets of 'salet'.  Might be amusing to reference.
 #Counter({'bbbbb': 865, 'ybbbb': 824, 'bbbyb': 715, 'bybbb': 583, 'bbbgb': 552, 'bgbbb': 441, 'ybbyb': 401, 'ygbbb': 393, 'ybbgb': 364, 'yybbb': 340, 'bybyb': 301, 'gbbbb': 269, 'bbbby': 269, 'bbybb': 263, 'byybb': 256, 'ybbby': 256, 'bbyyb': 208, 'bgbgb': 198, 'bbbyy': 195, 'ybybb': 173, 'gybbb': 167, 'gbbyb': 151, 'bbygb': 147, 'gbbgb': 129, 'byyyb': 129, 'ybbyy': 126, 'bybby': 125, 'ygbby': 123, 'bbbbg': 119, 'ygbgb': 119, 'bgbby': 118, 'bbbgy': 113, 'yybyb': 111, 'bgbyb': 101, 'bbgbb': 100, 'yyybb': 99, 'ybgbb': 98, 'gbbby': 95, 'bgybb': 92, 'ybyyb': 87, 'yybby': 85, 'bybyy': 81, 'bybbg': 81, 'gbybb': 73, 'ggbbb': 73, 'ybbgy': 72, 'bygbb': 68, 'gbbyy': 64, 'ybygb': 64, 'ygybb': 63, 'bbbyg': 62, 'gybyb': 60, 'bybgb': 58, 'bbgyb': 57, 'bggbb': 57, 'bbggb': 56, 'ybbbg': 53, 'gybby': 52, 'gyybb': 48, 'bbbgg': 44, 'gbyyb': 44, 'gbbbg': 43, 'yggbb': 41, 'bgbbg': 37, 'bgbgy': 37, 'bbyyy': 37, 'ybggb': 37, 'bbyby': 36, 'yybgb': 35, 'ybgyb': 35, 'bgygb': 34, 'yyyyb': 34, 'yybyy': 33, 'ggbgb': 32, 'byyby': 31, 'bbybg': 30, 'ybbyg': 30, 'bgyyb': 30, 'bybyg': 27, 'gbgbb': 27, 'ybyby': 25, 'ygbyb': 23, 'ygbgy': 23, 'ybgby': 22, 'bgbyy': 20, 'gybbg': 19, 'byybg': 19, 'gybyy': 19, 'bgyby': 18, 'yygbb': 18, 'yybbg': 16, 'bygyb': 16, 'gbygb': 16, 'gbbgy': 15, 'bbgby': 15, 'gyyyb': 14, 'bggby': 14, 'bgggb': 14, 'gbyby': 13, 'gggbb': 13, 'bbyyg': 13, 'bbygy': 13, 'ygygb': 13, 'byygb': 12, 'ygggb': 12, 'ybgyy': 12, 'byyyy': 11, 'byggb': 11, 'gbggb': 11, 'bbgyy': 10, 'ygbyy': 10, 'ggbby': 10, 'byyyg': 9, 'ybbgg': 9, 'bbggg': 9, 'gbbyg': 9, 'yyyby': 9, 'gygbb': 8, 'ggbyb': 8, 'yggby': 8, 'ygbbg': 7, 'yybyg': 7, 'bybgy': 7, 'bgbgg': 7, 'ybyyy': 7, 'bgybg': 6, 'bggyb': 6, 'gbybg':6, 'gbyyy': 6, 'bbgyg': 6, 'ygyby': 6, 'gbgyb': 5, 'ygyyb': 5, 'ggbbg': 5, 'gyyyy': 5, 'yyybg': 5, 'ggybb': 5, 'bgygy': 5, 'gyybg': 5, 'bbggy': 5, 'bygby': 5, 'bygyy': 4, 'bbgbg': 4, 'gbyyg': 4, 'gyyby': 4, 'bbygg': 4, 'bgyyy': 4, 'gggyb': 4, 'yyygb': 4, 'ybygy': 4, 'ybggy': 4, 'gbbgg': 3, 'gybyg': 3, 'yggyb': 3, 'byygy': 3, 'gggby': 3, 'yyggb': 3, 'yybgy': 3, 'yyyyy': 3, 'ggbgy': 3, 'gygyb': 3, 'gybgb': 3, 'yybgg': 2, 'bgggg': 2, 'byggg': 2, 'bybgg': 2, 'yygby': 2, 'ybybg': 2, 'yygyb': 2, 'gggbg': 2, 'ggggb': 2, 'gbgby': 2, 'bgggy': 2, 'ybggg': 1, 'ggbyy': 1, 'bygyg': 1, 'gbygg': 1, 'gygbg': 1, 'gbygy': 1, 'yyyyg': 1, 'gbgbg': 1, 'bygbg': 1, 'ybyyg': 1, 'bgbyg': 1, 'ygbyg': 1, 'bggbg': 1, 'bgygg': 1, 'ggyyb': 1, 'ggggg': 1, 'ggygb': 1, 'ggybg': 1, 'gyygb': 1, 'ygyyy': 1, 'ygggy': 1})
 
-'''
-for i in range(0, num_words):
-    word = words[i]
-    for j in range(i, num_words):
-        word2 = words[j]
-        word_ranks.append( (score_pair_distribution(word, word2, sd['ybgbb']), word, word2) ) 
 
-# omfg, the process was killed AS I WAS DUMPING IT
-pickle.dump((word_ranks, i, j-1, sd['ybgbb']), open("word_ranks_ybgbb_part1.pickle", 'wb'))
 
-#>>> i
-#9566
-#>>> j
-#11253
-#>>> len(word_ranks)
-#78342444
-'''
-
-h1 = list(filter(lambda w : w[2:] == "lls", words))
-h2 = list(filter(lambda w : w[1:] == "ests", words))
-hardwords = h1+h2
 count = 0
 
-# So in each step I want to receive a word and a list of valid words (initially seeded)
-# Then I compute a dictionary yof all possible hints.
-# Next I discharge the solution of all buckets.
+# Greedily compute solutions for every goal.  
+#If no limit is set, it will just keep going until it wins, which isn't so bad.
 def compute_all_wordles(bword, bwords, move=1, extra=False, history=[], limit=69):
     global count
     if move >= limit:
         print(f"Limit {limit} exceeded with {bword}:{bwords[:5]}.")
         return (history + bwords, move + len(bwords))
-    #goals = dict()
     solutions = dict()
     #for word in bwords:
     #    hint = get_hints3(bword, word)
@@ -797,54 +716,34 @@ def compute_all_wordles_hard(bword, bwords, guesses=None, move=1, extra=False, l
     return solutions
 
 
-#>>> s = time.time(); d = get_hint_distribution_with_words('aeros', words); e = time.time(); print(f"{e - s}")
-#0.03649020195007324
-#>>> s = time.time(); d1 = get_hint_distribution('aeros', words); e = time.time(); print(f"{e - s}")
-#0.02434992790222168
-# vs like 25-30 seconds for the other one!
-'''
-word_distros = dict()
-for i, word in enumerate(words):
-  if i % 1000 == 0:
-      print(f"On step {i} / {num_words}")
-  c = get_hint_distribution(word, words)
-  d = get_hint_distribution_with_words_as_sets(word, words)
-  word_distros[word] = (c, d)
-pickle.dump(word_distros, open("word_distros2.pickle", "wb"))
-# 833M!
-# Updated in the same file... whoops, but I fixed it.
-wc_counts = sorted([(c.most_common(1)[0][1] , word) for word, (c, _) in word_distros.items()])
-best_1k2 = [w for _, w in wc_counts][:1000]
-#pickle.dump((best_1k2, wc_counts), open("word_rankings_3.pickle", "wb"))
-'''
+# Calculating the word distributions for starter words.
+#word_distros = dict()
+#for i, word in enumerate(words):
+#  c = get_hint_distribution(word, words)
+#  d = get_hint_distribution_with_words_as_sets(word, words)
+#  word_distros[word] = (c, d)
+# 833Mb!
+#wc_counts = sorted([(c.most_common(1)[0][1] , word) for word, (c, _) in word_distros.items()])
 #>>> wc_counts[:10]
 #[(697, 'serai'), (769, 'reais'), (769, 'soare'), (776, 'paseo'), (801, 'aeros'), (821, 'kaies'), (823, 'nares'), (823, 'nears'), (823, 'reans'), (825, 'stoae')]
 #>>> wc_counts[-1]
 #(8189, 'gyppy')
-#Interesting... it's mostly the same but a biiiit different
-#pickle.dump((best_1k, wc_counts), open("word_rankings_2.pickle", "wb"))
+
+# Looking at the 'best' words according to possible word splitting and a dscore metric. 
+# It's pretty similar but a biiiit different.
 #>>> dscore_distros = {}
 #>>> for word in words:
-#    ...  dscore_distros[word] = score_hint_distribution(word, words)
-#    ... 
+#    ...  dscore_distros[word] = dscore_hint_distribution(word, words)
 #    >>> sc = sorted([(s, w) for w,s in dscore_distros.items()])
 #>>> sc[:10]
 #[(2375.1298951588037, 'lares'), (2403.1796176379894, 'rales'), (2501.012565525748, 'reais'), (2503.9330866481655, 'tares'), (2510.490749306198, 'nares'), (2511.9708603145236, 'aeros'), (2513.8434320074007, 'soare'), (2575.955673758865, 'rates'), (2603.6278137526983, 'arles'), (2653.5081714461917, 'aloes')]
 #>>> sc[-10:]
 #[(48949.254239901325, 'jugum'), (49075.940178846744, 'yukky'), (49280.66057662658, 'bubby'), (49350.35800185014, 'cocco'), (50011.36578785076, 'fuzzy'), (51477.88629355535, 'immix'), (51865.8388066605, 'hyphy'), (53230.85892691952, 'xylyl'), (53373.009019426456, 'gyppy'), (53518.9004008634, 'fuffy')]
 
-#p4 = compute_all_wordles('aeros', words, move=1)
-#pickle.dump(p4, open("wordle_pseudo_solution1.pickle", "wb"))
-#sol_dic = pickle.load(open("wordle_pseudo_solution1.pickle", 'rb'))
-#pickle.dump(sol_dic, open("wordle_pseudo_solution2.pickle", "wb")) # failes 57
-#pickle.dump(sol_dic2, open("wordle_pseudo_solution3.pickle", "wb")) # failes 45 -- with 'salet' as seed!
-#pickle.dump(sol_dic2, open("wordle_pseudo_solution3.pickle", "wb")) # failes 65 -- with 'salet' as seed!
-#sol_dic = pickle.load(open("wordle_pseudo_solution3.pickle", 'rb'))
-#sol_dic2 = pickle.load(open("wordle_pseudo_solution5.pickle", 'rb'))
-
-def check_results(solutions):
+# Checks a solution dictionary to see if it goes over the limit anywhere
+def check_results(solutions, limit=6):
     if isinstance(solutions, tuple):
-        if solutions[1] > 6:
+        if solutions[1] > limit:
             #print(f"Failed check: {solutions}")
             return False
         else:
@@ -862,21 +761,25 @@ def retrieve_all_results(solutions):
         results += retrieve_all_results(v)
     return results
 
-def retrieve_false_results(solutions, hints = []):
+# Return all leaves above the limit, 6 for normal Wordle.
+def retrieve_false_results(solutions, hints = [], limit=6):
     results = []
     if isinstance(solutions, tuple):
-        if solutions[1] > 6:
+        if solutions[1] > limit:
             return [(hints, solutions)]
         return []
     for h, v in solutions.items():
         results += retrieve_false_results(v, hints + [h])
     return results
 
+# Sometimes I just want to access an actual leaf of the tree and that's it!  =D
 def retrieve_first_result(solutions):
     if isinstance(solutions, tuple):
         return solutions
     return retrieve_first_result(next(iter(solutions.values())))
 
+# Some functions didn't handle the starter word correctly in the history.
+# Irrelevant to actually solving it but ugly.
 def fix_results(solutions):
     if isinstance(solutions, tuple):
         wordlist, count = solutions
@@ -889,6 +792,7 @@ def fix_results(solutions):
         solutions[hint] = fix_results(next_solutions)
     return solutions
 
+# Sloppy code repair =D
 def fixup_history(solutions, history):
     if isinstance(solutions, tuple):
             return (solutions[0], solutions[1], history + solutions[2])
@@ -896,6 +800,9 @@ def fixup_history(solutions, history):
         solutions[hint] = fixup_history(next_solutions, history)
     return solutions
 
+# Convert between 'new' and 'old' solution formats.
+# The new is better and what the brute-force method creates,
+# But a lot of utility functions only work on the 'old' format.
 def translate_res_new_to_old_rec(solutions):
     if isinstance(solutions, tuple):
             return (solutions[2], solutions[0])
@@ -916,18 +823,22 @@ def translate_res_old_to_new_rec(solutions):
 def translate_res_old_to_new(solutions):
     translate_res_old_to_new_rec(solutions)
 
+# Retrieves all words in a (sub)dictionary from a solution.  Utility function.
 def get_sol_entries(d):
     return [wl[-1] for wl, _ in retrieve_all_results(d)]
 
+# Locate the hint where a word lies in a solution: 
+#find_sol_hint('nadir', swift_solution_full) --> 'bbybb'
 def find_sol_hint(w, d):
     for key, value in d.items():
         if w in get_sol_entries(value):
             return key
 
+# Given an old-solution, return a dictionary consting of tuples, (move, next_possibilities).
+# Basically removing helpful but unnecessaryr information from the barebones solution.
 def get_sol_skeleton(d, i=1):
     moves = dict()
     for hint, next_solutions in d.items():
-        #print(hint)
         res = retrieve_first_result(next_solutions)[0]
         if hint != "ggggg" and len(res) > i:
             next_move = res[i]
@@ -939,9 +850,11 @@ def get_sol_skeleton(d, i=1):
             moves[hint] = res[-1]
     return moves
 
+# Invokes the recursive function above with the first move.
 def wrap_skel(d):
     return (retrieve_first_result(d)[0][0], get_sol_skeleton(d))
 
+# Plays out a history or solution of moves and returns the resulting dictionary of hints and their buckets
 def play_history(history, possible_words):
     hint_dist = get_hint_distribution_with_words(history[0], possible_words)
     history = history[1:]
@@ -956,6 +869,10 @@ def play_history(history, possible_words):
     else:
         return hint_dist
 
+# Given the output of play_history, flattens the dictionary
+# Returns tupless: (size_of_bucket, words_in_bucket)
+# e.g., get_history_buckets(play_history(['swift', 'lover', 'tanty', 'aahed'], words))
+# [(4, ['cigar', 'cimar', 'imbar', 'quair']), (1, ['chair']), ...] 
 def get_history_buckets(history_dic):
     if isinstance(history_dic, list):
         return [(len(history_dic), history_dic)]
@@ -964,28 +881,7 @@ def get_history_buckets(history_dic):
         results += get_history_buckets(value)
     return results
 
-#>>> [find_sol_hint(w, sis['ybbyy']) for w in fs['ybbyy']]
-#['bgbbb', 'bgbbb', 'bgbbb']
-
-
-
-#base, si_sols, fails = pickle.load(open("tmp.pickle", 'rb'))
-#si_sols, fails = pickle.load(open("tmp2.pickle", 'rb'))
-#si_sols3, fails3 = pickle.load(open("si_sols3.pickle", 'rb'))
-#si_sols, fails = pickle.load(open("official_goal_solution_hard_tmp1.pickle", 'rb'))
-
-#>>> pickle.dump((si_sols, fails), open("si_sols1.pickle", "wb"))
-#>>> set([w[:5] for w in fails.keys()])
-#{'ybgbb', 'ybbyy', 'ybbgb'}
-
-#>>> pickle.dump((si_sols, fails), open("si_sols2.pickle", "wb"))
-#>>> set([w[:5] for w in fails.keys()])
-#{'ygbgb', 'ybgbb', 'bgbgb', 'ybbgb', 'ybbyy', 'bbbgb'}
-
-#>>> pickle.dump((si_sols, fails), open("si_sols3.pickle", "wb"))
-#>>> set([w[:5] for w in fails.keys()])
-#{'ybgbb', 'ybbyy'}
-
+# Retrieve the words and hints on which an attempted solution (old) fails.  Hardcoded to k = 6
 def get_fails(partial, official_goals_only=False):
     failed4 = set(); fails = dict()
     for h, w in partial.items():
@@ -1000,83 +896,8 @@ def get_fails(partial, official_goals_only=False):
                 failed4.update(fset)
     return fails, failed4
 
-wordlist2 = []
-next_words = []
-
-def try_again(fails, partials, base=None, trynum=0, extra=False, official_goals_only=False, history=['salet']):
-    global count
-    global wordlist2
-    global next_words
-    for hints in fails.keys():
-        if base:
-            wordlist = base[hints]
-        else:
-            wordlist = [w[0][-1] for w in retrieve_all_results(partials[hints])]
-            if not extra and set(wordlist) != set(wordlist2):
-                wordlist2 = wordlist
-                #next_words = sorted([(score_pair_distribution(word, word2, wordlist2), word) for word in words for word2 in words])
-                next_words = sorted([(score_hint_distribution2_with_words(word, wordlist), word) for word in words])
-        if extra:
-            bword = sorted([(dscore_hint_distribution(word, wordlist), word) for word in words])[trynum][1]
-        else:
-            bword = next_words[trynum][1]
-            #bword = sorted([(score_hint_distribution2_with_words(word, wordlist), word) for word in words])[trynum][1]
-        count = 0
-        partials[hints] = compute_all_wordles(bword, wordlist, move=2, extra=extra, history=history)
-        if check_results(partials[hints]):
-            print(f"{hints} is newly solved with {bword}.")
-    return partials
-
-def try_again_hard_official(fails, partials, guessdic, trynum=0, extra=False):
-    for hints in fails.keys():
-        wordlist = [w[0][-1] for w in retrieve_all_results(partials[hints])]
-        guesslist = guessdic[hints]
-        if extra:
-            bword = sorted([(score_hint_distribution(word, wordlist), word) for word in guesslist])[trynum][1]
-        else:
-            bword = sorted([(get_hint_distribution(word, wordlist).most_common(1)[0][1], word) for word in guesslist])[trynum][1]
-        partials[hints] = compute_all_wordles_hard(bword, wordlist, guesses=guesslist,  move=2, extra=extra, history=['salet'])
-        if check_results(partials[hints]):
-            print(f"{hints} is newly solved with {bword}.")
-    return partials
-
-
-if False:
-    si_sols = pickle.load(open("salet_tmp_sol_1.pickle", 'rb'))
-    history = ['salet', 'genre', 'syphs']
-    #si_sols = pickle.load(open("logic1.pickle", 'rb'))
-    fails, _ = get_fails(si_sols)
-    #si_sols = sol_dic2
-    #fails, failed4 = get_fails(si_sols)
-    #si_sols = si_sols3; fails = fails3
-    #guessdic = get_hint_distribution2('logic')
-    for i in range(0, num_words):
-        for j in range(2):
-            if j == 0:
-                si_sols = try_again(fails, si_sols, trynum=i, extra=True, history=history)
-                #si_sols = try_again_hard_official(fails, si_sols, guessdic=guessdic, trynum=i, extra=True)
-                fails, failed4 = get_fails(si_sols, official_goals_only=False)
-                print(f"On try {i}-1 there are {len(fails)} failed hints and {len(failed4)} failed words.")
-                if len(fails) == 0:
-                    break
-            else:
-                si_sols = try_again(fails, si_sols, trynum=i, extra=False, history=history)
-                #si_sols = try_again_hard_official(fails, si_sols, guessdic=guessdic, trynum=i, extra=False)
-                fails, failed4 = get_fails(si_sols, official_goals_only=False)
-                print(f"On try {i}-2 there are {len(fails)} failed hints and {len(failed4)} failed words.")
-                if len(fails) == 0:
-                    break
-        #print(f"On try {i}-extra={extra} there are {len(fails)} failed hints and {len(failed4)} failed words.")
-        if len(fails) == 0:
-            break
-
-#>>> si_sols = sis['ybbyy']['bgbbb']
-#>>> for word in words:
-#    ...  z = compute_all_wordles(word, fs['ybbyy'], move=2, history=['salet'])
-#    ...  fails, failed4 = get_fails(z)
-#    ...  if len(fails) == 0:
-#        ...   adequate_worsd.append(word)
-
+# Relic from when I wanted to selectively try the greedy solution some extra times (without actually brute-forcing)
+#def try_again(fails, partials, base=None, trynum=0, extra=False, official_goals_only=False, history=['salet']):
 
 # Four deterministic solution dictionaries in the 'old' format.  Includes word histories and solution depth info.
 official_solution_full = pickle.load(open("official_goal_solution.pickle", "rb"))
