@@ -7,6 +7,8 @@ from random import sample, random, shuffle
 import pickle
 import json
 import time
+import pprint
+import ast
 
 # The 12,972 words
 words = open("words.txt", 'r').read().splitlines()
@@ -81,7 +83,7 @@ if False:
         with open("best_pairs.txt", "r") as f:
             for l in f.readlines():
                 l2 = l.rstrip("\n").split(",")
-                w1 = l2[0][1:].
+                w1 = l2[0][1:]
                 w2 = l2[1][1:-1]
                 key = "".join(sorted(set(w1).union(set(w2))))
                 if len(key) == 10: 
@@ -488,8 +490,8 @@ def score_pair_distribution(word1, word2, possible_words):
 #d = get_hint_distribution_with_words(word, words)
 #word_distros[word] = (c, d)
 #word_distros = pickle.load(open("word_distros.pickle", "rb"))
-best_1k, wc_counts = pickle.load(open("word_rankings_3.pickle", "rb"))
-worst_words = list(wordset - set(best_1k))
+#best_1k, wc_counts = pickle.load(open("word_rankings_3.pickle", "rb"))
+#worst_words = list(wordset - set(best_1k))
 
 def score_hint_distribution2(word):
     return word_distros[word][0].most_common(1)[0][1]
@@ -837,8 +839,8 @@ best_1k2 = [w for _, w in wc_counts][:1000]
 #pickle.dump(sol_dic, open("wordle_pseudo_solution2.pickle", "wb")) # failes 57
 #pickle.dump(sol_dic2, open("wordle_pseudo_solution3.pickle", "wb")) # failes 45 -- with 'salet' as seed!
 #pickle.dump(sol_dic2, open("wordle_pseudo_solution3.pickle", "wb")) # failes 65 -- with 'salet' as seed!
-sol_dic = pickle.load(open("wordle_pseudo_solution3.pickle", 'rb'))
-sol_dic2 = pickle.load(open("wordle_pseudo_solution5.pickle", 'rb'))
+#sol_dic = pickle.load(open("wordle_pseudo_solution3.pickle", 'rb'))
+#sol_dic2 = pickle.load(open("wordle_pseudo_solution5.pickle", 'rb'))
 
 def check_results(solutions):
     if isinstance(solutions, tuple):
@@ -894,19 +896,25 @@ def fixup_history(solutions, history):
         solutions[hint] = fixup_history(next_solutions, history)
     return solutions
 
-def translate_res_new_to_old(solutions):
+def translate_res_new_to_old_rec(solutions):
     if isinstance(solutions, tuple):
             return (solutions[2], solutions[0])
     for hint, next_solutions in solutions.items():
-        solutions[hint] = translate_res_new_to_old(next_solutions)
+        solutions[hint] = translate_res_new_to_old_rec(next_solutions)
     return solutions
 
-def translate_res_old_to_new(solutions):
+def translate_res_new_to_old(solutions):
+    translate_res_new_to_old_rec(solutions)
+
+def translate_res_old_to_new_rec(solutions):
     if isinstance(solutions, tuple):
             return (solutions[1], solutions[0][-1], solutions[0])
     for hint, next_solutions in solutions.items():
-        solutions[hint] = translate_res_old_to_new(next_solutions)
+        solutions[hint] = translate_res_old_to_new_rec(next_solutions)
     return solutions
+
+def translate_res_old_to_new(solutions):
+    translate_res_old_to_new_rec(solutions)
 
 def get_sol_entries(d):
     return [wl[-1] for wl, _ in retrieve_all_results(d)]
@@ -921,7 +929,7 @@ def get_sol_skeleton(d, i=1):
     for hint, next_solutions in d.items():
         #print(hint)
         res = retrieve_first_result(next_solutions)[0]
-        if hint != "ggggg":#len(res) > i:
+        if hint != "ggggg" and len(res) > i:
             next_move = res[i]
             if isinstance(next_solutions, dict):
                 moves[hint] = (next_move, get_sol_skeleton(next_solutions, i+1))
@@ -930,6 +938,9 @@ def get_sol_skeleton(d, i=1):
         else:
             moves[hint] = res[-1]
     return moves
+
+def wrap_skel(d):
+    return (retrieve_first_result(d)[0][0], get_sol_skeleton(d))
 
 def play_history(history, possible_words):
     hint_dist = get_hint_distribution_with_words(history[0], possible_words)
@@ -1067,17 +1078,28 @@ if False:
 #        ...   adequate_worsd.append(word)
 
 
-#official solution 2.3k goals
-#sol_dico = pickle.load(open("official_goal_solution.pickle", "rb"))
-sol_dico = pickle.load(open("official_goal_solution_fixed.pickle", "rb"))
-sol_dicho = pickle.load(open("official_goal_solution_hard.pickle", "rb"))
+# Four deterministic solution dictionaries in the 'old' format.  Includes word histories and solution depth info.
+official_solution_full = pickle.load(open("official_goal_solution.pickle", "rb"))
+official_solution_hard_full = pickle.load(open("official_goal_solution_hard.pickle", "rb"))
+swift_solution_full = pickle.load(open("swiftlover6.pickle", 'rb')) # Almost always plays lover second
+swift_solution2_full = pickle.load(open("swiftlover6_2.pickle", 'rb')) # A bit more diversified
+
+# Solution skeletons that just record which move to take for which hint.  Probably recommended.
+official_solution = ast.literal_eval(open('official_goal_solution.pp.txt', 'r').read())
+official_solution_hard = ast.literal_eval(open('official_goal_solution_hard.pp.txt', 'r').read())
+swift_solution = ast.literal_eval(open('swiftlover6.pp.txt', 'r').read())
+swift_solution2 = ast.literal_eval(open('swiftlover62.pp.txt', 'r').read())
 
 # Take one of a wordle assist function where I had to manually keep track of the remaining words and the history 
 #def wordle_assist(guess, hint, remaining_words, move2="", num=3):
 
+# Wordle assistant that tells you how to play according to a solution file.
+# Only works with the 'old' format.
 class OWordle:
-    def __init__(self, dic=sol_dico, move='salet'):
+    def __init__(self, dic=None, move=None):
         self.dic = dic
+        if not move:
+            move = retrieve_first_result(self.dic)[0][0]
         self.history = [move]
         print(f"Please play '{move}' for move {len(self.history)}.")
 
@@ -1095,28 +1117,62 @@ class OWordle:
             print(f"Please play '{next_move}' for move {len(self.history)}.")
         return next_move
 
+# Wordle assistant that tells you how to play according to a skeleton of a solution file.
+class SWordle:
+    def __init__(self, dic=None):
+        move = dic[0]
+        self.dic = dic[1]
+        self.history = [move]
+        print(f"Please play '{move}' for move {len(self.history)}.")
+
+    def move(self, hint):
+        if isinstance(self.dic, str):
+            print(f"The game is over.")
+            return self.dic
+        move_num = len(self.history) + 1
+        next_pair = self.dic[hint]
+        if isinstance(next_pair, str):
+            next_move = next_pair
+            self.dic = None
+            print(f"You have won with '{next_move}' in {move_num} moves.")
+        else:
+            next_move = self.dic[hint][0]
+            self.dic = self.dic[hint][1]
+            print(f"Please play '{next_move}' for move {move_num}.")
+        self.history.append(next_move)
+        return next_move
+
+# Wordle assistant to keep track of the possible goals and move history
+# It recommends 13 moves each round and you can inspect the whole ranking.
+# If you use it's recommendation, you just need to supply the hint.
 class GWordle:
     def rec(self, hint, move=None):
         self.move += 1
         if not move:
             move = self.next_move
-        #self.words = get_hint_distribution_with_words(move, self.words)[hint] 
-        self.words = get_hint_distribution2_with_words(move, self.words)[hint] 
+        self.words = get_hint_distribution_with_words(move, self.words)[hint] 
+        #self.words = get_hint_distribution2_with_words(move, self.words)[hint] 
         if len(self.words) == 1:
             next_move = list(self.words)[0]
             print(f"You will win with '{next_move}' in {self.move + 1} moves.")
             return next_move 
         else:
-            #options = sorted([(score_hint_distribution(word, self.words), word) for word in self.guesses]) 
-            options = sorted([(score_hint_distribution2_with_words(word, self.words), word) for word in self.guesses]) 
-            to_show = len(options) if len(options) < 13 else 13
-            print(f"There are {len(self.words)} possible words.  The best {to_show} options are:\n{options[:to_show]}.")
-            self.next_move = options[0][1]
+            self.options = sorted([(score_hint_distribution(word, self.words), word) for word in self.guesses]) 
+            #options = sorted([(score_hint_distribution2_with_words(word, self.words), word) for word in self.guesses]) 
+            to_show = len(self.options) if len(self.options) < 13 else 13
+            print(f"There are {len(self.words)} possible words.  The best {to_show} options are:\n{self.options[:to_show]}.")
+            self.next_move = self.options[0][1]
             return self.next_move
+
+    # Generates the list of scores for the first move.  May take a while.
+    def init_options(self):
+        if not self.options:
+            self.options = sorted([(score_hint_distribution(word, self.words), word) for word in self.guesses])
 
     def __init__(self, move=None, hint=None, possible_words=words, possible_guesses=words):
         self.words = possible_words
         self.guesses = possible_guesses
+        self.options = None
         self.move = 0
         self.next_move = move if move else 'salet'
         if hint:
@@ -1124,11 +1180,11 @@ class GWordle:
 
     
 
-x = GWordle()
-xo = GWordle(possible_words=official_goals)
-#ho = OWordle(sol_dicho)
+#x = GWordle()
+#xo = GWordle(possible_words=official_goals)
+#s = SWordle(swift_solution2)
+#ho = OWordle(official_solution_hard)
 
-#bsol = pickle.load(open("swift_bsol_words.pickle", 'rb'))
 
 # Uses the Wordle solver class to simulate gameplay for each goal
 # This is a sanity-check to make sure my solution is correct.
@@ -1157,7 +1213,7 @@ if False:
 
 # A one-off greedy Wordle solver using a bit of hacks, such as this "good words" list.
 # It got around 97.4% on the full dataset
-def solve_wordle(seed, goal, possible_words, seed2=None, sample_num=0):
+#def solve_wordle(seed, goal, possible_words, seed2=None, sample_num=0):
 
 # I spent some time trying to analyze *ESTS and *ILLS as hard word sets.
 # I thought maybe it would be possible to find a simple combinatorial argument why they can or can't be solved.
@@ -1486,7 +1542,7 @@ if False:
         num = 0
         wdiff = diffs[word]
         solved_indices[word] = solved_indices.get(word, [])
-        for i in [i for score_avg, score_count, i in wdiff]
+        for i in [i for score_avg, score_count, i in wdiff]:
             num += 1
             print(f"++ Starting index {num}/{lww} of {word}. ({indices})")
             ws = set(ww[i])
