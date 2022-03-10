@@ -49,13 +49,13 @@ You will win with 'month' in 4 moves.
   
 ---
   
-words.txt -- 12,972 words that can be used as guesses in Wordle
-wordle\_answers\_alphabetical.txt -- 2315 words that were scraped from the website as "official goals"
-best\_1k.txt -- 1000 good starting moves
-best\_quints\_25.txt -- quintuplets of words that cover 24-25 letters
-sgb-words.txt -- 5755 words assembled for a Word Ladder by [Donald Knuth](https://www-cs-faculty.stanford.edu/~knuth/sgb.html).
-swiftlover6\_official\_plays.txt -- Simulated plays for each official goal.
-swiftlover6\_all\_plays.txt -- Simulated plays for each goal.
-
-words.py -- The main code.  The interactive content is near the end of the file.
+words.txt -- 12,972 words that can be used as guesses in Wordle.  
+wordle\_answers\_alphabetical.txt -- 2315 words that were scraped from the website as "official goals".   
+best\_1k.txt -- 1000 good starting moves.  
+best\_quints\_25.txt -- quintuplets of words that cover 24-25 letters.  
+sgb-words.txt -- 5755 words assembled for a Word Ladder by [Donald Knuth](https://www-cs-faculty.stanford.edu/~knuth/sgb.html).  
+swiftlover6\_official\_plays.txt -- Simulated plays for each official goal.  
+swiftlover6\_all\_plays.txt -- Simulated plays for each goal.  
+ 
+words.py -- The main code.  The interactive content is near the end of the file.  
 
