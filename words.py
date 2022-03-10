@@ -21,6 +21,8 @@ zwords = open("zwords.txt", 'r').read().splitlines()
 official_goals = open("wordle_answers_alphabetical.txt", 'r').read().splitlines()
 official_goal_set = set(official_goals)
 
+best_1k = open("best_1k.txt", 'r').read().splitlines()
+
 # Length 5 words from some Knuth project \^o^/
 #sgb_words = open("sgb-words.txt", 'r').read().splitlines()
 #sgb_uwords = list(filter(lambda w : w not in words, sgb_words))
@@ -422,9 +424,9 @@ def dscore(hints):
 #def calculate_word_possibilities3_with_dscore(word, possible_words):
 #def calculate_pair_possibilities3_with_dscore(word1, word2, possible_words):
 
-# First stab at ranking words by how well they split the goals
-#word_rankings = pickle.load(open("work_rankings_1.pickle", 'rb'))
-#ranked_words = list(list(zip(*sorted(word_rankings)))[1])
+###
+# The primary utility functions for working with move simulations.
+###
 
 # WAY faster than locate_word_possibilities!
 # Just use a dictionary or Counter to batch hints and the word filtering happens naturally.
@@ -435,9 +437,11 @@ def get_hint_distribution(word, possible_words):
         hints[hint] += 1
     return hints
 
+# And then I can get the best word thanks to the Counter
 def score_hint_distribution(word, possible_words):
     return get_hint_distribution(word, possible_words).most_common(1)[0][1]
 
+# Expected value of {score * hint-bucket size}
 def dscore_hint_distribution(word, possible_words):
     hints = get_hint_distribution(word, possible_words)
     total = sum(hints.values())
@@ -447,6 +451,7 @@ def dscore_hint_distribution(word, possible_words):
         acc += score * (count**2)
     return acc / total
 
+# Gather goals into hint-buckets.
 def get_hint_distribution_with_words(word, possible_words):
     hints = dict()
     for goal in possible_words:
@@ -454,14 +459,10 @@ def get_hint_distribution_with_words(word, possible_words):
         hints[hint] = hints.get(hint, []) + [goal]
     return hints
 
-def get_hint_distribution_with_words_as_sets(word, possible_words):
-    hints = dict()
-    for goal in possible_words:
-        hint = get_hints3(word, goal)
-        tmp = hints.get(hint, set()); tmp.update([goal])
-        hints[hint] = tmp
-    return hints
+# Not used
+#def get_hint_distribution_with_words_as_sets(word, possible_words):
 
+# Do two-step hint buckets for lookahead (ultimately not used much).
 def get_pair_distribution_with_words(word1, word2, possible_words):
     hint_dist1 = get_hint_distribution_with_words(word1, possible_words)
     hint_dist2 = get_hint_distribution_with_words(word2, possible_words)
@@ -475,6 +476,7 @@ def get_pair_distribution_with_words(word1, word2, possible_words):
         hints[nhint] = tmp
     return hints
 
+# Now count it!
 def count_pair_distribution_with_words(word1, word2, possible_words):
     hints = get_pair_distribution_with_words(word1, word2, possible_words)
     counts = Counter()
@@ -482,132 +484,27 @@ def count_pair_distribution_with_words(word1, word2, possible_words):
         counts[h] = len(s)
     return counts
 
+# And score it ~ 
 def score_pair_distribution(word1, word2, possible_words):
     counts = count_pair_distribution_with_words(word1, word2, possible_words)
     return counts.most_common(1)[0][1]
 
-#c = get_hint_distribution(word, words)
-#d = get_hint_distribution_with_words(word, words)
-#word_distros[word] = (c, d)
-#word_distros = pickle.load(open("word_distros.pickle", "rb"))
-#best_1k, wc_counts = pickle.load(open("word_rankings_3.pickle", "rb"))
-#worst_words = list(wordset - set(best_1k))
-
-def score_hint_distribution2(word):
-    return word_distros[word][0].most_common(1)[0][1]
-
-def get_hint_distribution2(word):
-    return word_distros[word][1]
-
-def get_pair_distribution2(word1, word2):
-    hint_dist1 = get_hint_distribution2(word1)
-    hint_dist2 = get_hint_distribution2(word2)
+# The dscore version
+def dscore_pair_distribution(word1, word2, possible_words):
+    hint_dist1 = get_hint_distribution_with_words(word1, possible_words)
+    hint_dist2 = get_hint_distribution_with_words(word2, possible_words)
     hints = dict()
-    for hint1, ws1 in hint_dist1.items():
-        for hint2, ws2 in hint_dist2.items():
-            bucket = set(ws1) & set(ws2)
-            if bucket:
-                nhint = hint1 + hint2
-                hints[nhint] = bucket 
-    return hints
-
-def count_pair_distribution2(word1, word2):
-    hints = get_pair_distribution2(word1, word2)
-    counts = Counter()
-    for h, s in hints.items():
-        counts[h] = len(s)
-    return counts
-
-def score_pair_distribution2(word1, word2):
-    counts = count_pair_distribution2(word1, word2)
-    return counts.most_common(1)[0][1]
-
-
-def get_pair_distribution2_with_words2(word1, word2, possible_words):
-    hint_dist1 = get_hint_distribution2(word1)
-    hint_dist2 = get_hint_distribution2(word2)
-    hints = dict()
+    acc = 0; total = 0
     for goal in possible_words:
-        hint1 = get_hints3(word1, goal); hint2 = get_hints3(word2, goal); nhint = hint1+hint2
-        tmp = hints.get(nhint, set()); tmp.update(set(hint_dist1[hint1]) & set(hint_dist2[hint2]))
+        hint1 = get_hints3(word1, goal)
+        hint2 = get_hints3(word2, goal)
+        nhint = hint1+hint2
+        tmp = hints.get(nhint, set())
+        wordlist = set(hint_dist1[hint1]) & set(hint_dist2[hint2]); lwdl = len(wordlist)
+        tmp.update(wordlist)
         hints[nhint] = tmp
-    return hints
-
-def get_pair_distribution2_with_words(word1, word2, possible_words):
-    hint_dist1 = get_hint_distribution2(word1)
-    hint_dist2 = get_hint_distribution2(word2)
-    hints = dict()
-    ws = set(possible_words)
-    for hint1, ws1 in hint_dist1.items():
-        for hint2, ws2 in hint_dist2.items():
-            bucket = set(ws1) & set(ws2) & ws
-            if bucket:
-                nhint = hint1 + hint2
-                hints[nhint] = bucket 
-    return hints
-
-def get_hint_distribution2_with_words(word, possible_words):
-    hint_dist = get_hint_distribution2(word)
-    pws = set(possible_words)
-    hints = dict()
-    for hint, ws in hint_dist.items():
-        bucket = set(ws) & pws
-        if bucket:
-            hints[hint] = bucket
-    return hints
-
-def score_hint_distribution2_with_words(word, possible_words):
-    hint_dist = get_hint_distribution2(word)
-    pws = set(possible_words)
-    worst = 0
-    for hint, ws in hint_dist.items():
-        size = len(set(ws) & pws)
-        if size > worst :
-            worst = size
-    return worst
-
-def score_pair_distribution2_with_words2(word1, word2, possible_words):
-    hint_dist1 = get_hint_distribution2(word1)
-    hint_dist2 = get_hint_distribution2(word2)
-    ws = set(possible_words)
-    worst = 0
-    for hint1, ws1 in hint_dist1.items():
-        for hint2, ws2 in hint_dist2.items():
-            size = len(set(ws1) & set(ws2) & ws)
-            if size > worst:
-                worst = size
-    return worst
-
-# = time.time(); pd3 = get_pair_distribution2_with_words2('salet', 'irony', words); print(f"{time.time() - s}")
-# 1.440363883972168
-# >>> s = time.time(); pd = get_pair_distribution2_with_words('salet', 'irony', words); print(f"{time.time() - s}")
-# 0.3057122230529785
-
-
-def count_pair_distribution2_with_words(word1, word2, possible_words):
-    hints = get_pair_distribution2_with_words(word1, word2, possible_words)
-    counts = Counter()
-    for h, s in hints.items():
-        counts[h] = len(s)
-    return counts
-
-def score_pair_distribution2_with_words(word1, word2, possible_words):
-    counts = count_pair_distribution2_with_words(word1, word2, possible_words)
-    return counts.most_common(1)[0][1]
-
-# Not sure the desired behavior.  When you can't play the second move...?
-def get_pair_distribution2_hardmode(word1, word2):
-    hint_dist1 = get_hint_distribution2(word1)
-    hint_dist2 = get_hint_distribution2(word2)
-    hints = dict()
-    for hint1, ws1 in hint_dist1.items():
-        if word2 in ws1:
-            for hint2, ws2 in hint_dist2.items():
-                nhint = hint1 + hint2
-                hints[nhint] = set(ws1) & set(ws2)
-        else:
-            hints[hint1] = set()
-    return hints
+        acc += dscore(hint1) * dscore(hint2) * (lwdl**2); total += lwdl
+    return acc / total
 
 # Looking at a partial comparison of "best first two moves".  As it's non-total, it was easy for me to find a better solution, replacing  'irons' with 'irony'. 
 #[(129, 'salet', 'irons'), (132, 'salet', 'noirs'), (132, 'salet', 'noris'), (132, 'solei', 'rants'), (132, 'solei', 'tarns'), (134, 'nates', 'reoil'), (134, 'tales', 'irons'), (136, 'setal', 'irons'), (136, 'setal', 'noris'), (144, 'nates', 'loirs'), (144, 'nates', 'loris'), (144, 'nates', 'roils'), (144, 'tales', 'noirs'), (144, 'tales', 'noris'), (145, 'canes', 'reoil'), (147, 'cates', 'irons'), (147, 'nates', 'soral'), (147, 'rates', 'sloan'), (147, 'rates', 'solan'), (147, 'setal', 'noirs'), (147, 'stoae', 'nirls'), (147, 'taces', 'irons'), (147, 'tares', 'sloan'), (147, 'tares', 'solan'), (149, 'cates', 'reoil'), (149, 'taces', 'reoil'), (152, 'canes', 'loirs'), (152, 'canes', 'loris'), (152, 'canes', 'roils'), (152, 'reais', 'sloan'), (152, 'solei', 'darts'), (155, 'slate', 'irons'), (155, 'slate', 'noirs')]
@@ -619,31 +516,19 @@ def get_pair_distribution2_hardmode(word1, word2):
 # Counts for hint-buckets of 'salet'.  Might be amusing to reference.
 #Counter({'bbbbb': 865, 'ybbbb': 824, 'bbbyb': 715, 'bybbb': 583, 'bbbgb': 552, 'bgbbb': 441, 'ybbyb': 401, 'ygbbb': 393, 'ybbgb': 364, 'yybbb': 340, 'bybyb': 301, 'gbbbb': 269, 'bbbby': 269, 'bbybb': 263, 'byybb': 256, 'ybbby': 256, 'bbyyb': 208, 'bgbgb': 198, 'bbbyy': 195, 'ybybb': 173, 'gybbb': 167, 'gbbyb': 151, 'bbygb': 147, 'gbbgb': 129, 'byyyb': 129, 'ybbyy': 126, 'bybby': 125, 'ygbby': 123, 'bbbbg': 119, 'ygbgb': 119, 'bgbby': 118, 'bbbgy': 113, 'yybyb': 111, 'bgbyb': 101, 'bbgbb': 100, 'yyybb': 99, 'ybgbb': 98, 'gbbby': 95, 'bgybb': 92, 'ybyyb': 87, 'yybby': 85, 'bybyy': 81, 'bybbg': 81, 'gbybb': 73, 'ggbbb': 73, 'ybbgy': 72, 'bygbb': 68, 'gbbyy': 64, 'ybygb': 64, 'ygybb': 63, 'bbbyg': 62, 'gybyb': 60, 'bybgb': 58, 'bbgyb': 57, 'bggbb': 57, 'bbggb': 56, 'ybbbg': 53, 'gybby': 52, 'gyybb': 48, 'bbbgg': 44, 'gbyyb': 44, 'gbbbg': 43, 'yggbb': 41, 'bgbbg': 37, 'bgbgy': 37, 'bbyyy': 37, 'ybggb': 37, 'bbyby': 36, 'yybgb': 35, 'ybgyb': 35, 'bgygb': 34, 'yyyyb': 34, 'yybyy': 33, 'ggbgb': 32, 'byyby': 31, 'bbybg': 30, 'ybbyg': 30, 'bgyyb': 30, 'bybyg': 27, 'gbgbb': 27, 'ybyby': 25, 'ygbyb': 23, 'ygbgy': 23, 'ybgby': 22, 'bgbyy': 20, 'gybbg': 19, 'byybg': 19, 'gybyy': 19, 'bgyby': 18, 'yygbb': 18, 'yybbg': 16, 'bygyb': 16, 'gbygb': 16, 'gbbgy': 15, 'bbgby': 15, 'gyyyb': 14, 'bggby': 14, 'bgggb': 14, 'gbyby': 13, 'gggbb': 13, 'bbyyg': 13, 'bbygy': 13, 'ygygb': 13, 'byygb': 12, 'ygggb': 12, 'ybgyy': 12, 'byyyy': 11, 'byggb': 11, 'gbggb': 11, 'bbgyy': 10, 'ygbyy': 10, 'ggbby': 10, 'byyyg': 9, 'ybbgg': 9, 'bbggg': 9, 'gbbyg': 9, 'yyyby': 9, 'gygbb': 8, 'ggbyb': 8, 'yggby': 8, 'ygbbg': 7, 'yybyg': 7, 'bybgy': 7, 'bgbgg': 7, 'ybyyy': 7, 'bgybg': 6, 'bggyb': 6, 'gbybg':6, 'gbyyy': 6, 'bbgyg': 6, 'ygyby': 6, 'gbgyb': 5, 'ygyyb': 5, 'ggbbg': 5, 'gyyyy': 5, 'yyybg': 5, 'ggybb': 5, 'bgygy': 5, 'gyybg': 5, 'bbggy': 5, 'bygby': 5, 'bygyy': 4, 'bbgbg': 4, 'gbyyg': 4, 'gyyby': 4, 'bbygg': 4, 'bgyyy': 4, 'gggyb': 4, 'yyygb': 4, 'ybygy': 4, 'ybggy': 4, 'gbbgg': 3, 'gybyg': 3, 'yggyb': 3, 'byygy': 3, 'gggby': 3, 'yyggb': 3, 'yybgy': 3, 'yyyyy': 3, 'ggbgy': 3, 'gygyb': 3, 'gybgb': 3, 'yybgg': 2, 'bgggg': 2, 'byggg': 2, 'bybgg': 2, 'yygby': 2, 'ybybg': 2, 'yygyb': 2, 'gggbg': 2, 'ggggb': 2, 'gbgby': 2, 'bgggy': 2, 'ybggg': 1, 'ggbyy': 1, 'bygyg': 1, 'gbygg': 1, 'gygbg': 1, 'gbygy': 1, 'yyyyg': 1, 'gbgbg': 1, 'bygbg': 1, 'ybyyg': 1, 'bgbyg': 1, 'ygbyg': 1, 'bggbg': 1, 'bgygg': 1, 'ggyyb': 1, 'ggggg': 1, 'ggygb': 1, 'ggybg': 1, 'gyygb': 1, 'ygyyy': 1, 'ygggy': 1})
 
-
-
 count = 0
 
 # Greedily compute solutions for every goal.  
-#If no limit is set, it will just keep going until it wins, which isn't so bad.
-def compute_all_wordles(bword, bwords, move=1, extra=False, history=[], limit=69):
+# If no limit is set, it will just keep going until it wins, which isn't so bad.
+# bword is the move to play in move=num and bwords are the moves that need to be solved
+def compute_all_wordles(bword, bwords, move=1, by_dscore=False, lookahead=False, history=[], limit=69):
     global count
     if move >= limit:
         print(f"Limit {limit} exceeded with {bword}:{bwords[:5]}.")
         return (history + bwords, move + len(bwords))
     solutions = dict()
-    #for word in bwords:
-    #    hint = get_hints3(bword, word)
-    #    goals[hint] = goals.get(hint, []) + [word]
     goals = get_hint_distribution_with_words(bword, bwords)
-    #next_hint = sorted([(hint, len(wordlist)) for hint, wordlist in goals.items()], key=itemgetter(1), reverse=True)[0][0]
-    #print(f"There are {len(goals)} distinct hints possible on move {move} with '{bword}'")
-    #print(f"{[(hint, wordlist[:1]) for hint, wordlist in goals.items()]}")
     for hint, wordlist in goals.items():
-        #if move == 5:
-        #    wordlist = list(set(wordlist) & official_goal_set)
-        #    if len(wordlist) == 0:
-        #        solutions[hint] = (history + [bword] + wordlist, 7)
-        #        continue
         if len(wordlist) == 1:
             count = count + 1
             if bword == wordlist[0]:
@@ -657,64 +542,26 @@ def compute_all_wordles(bword, bwords, move=1, extra=False, history=[], limit=69
             if count % 100 == 0:
                 print(f"There are {count} solved words.")
             continue
-        #next_word = sorted([(word, locate_word_possibilities(word, wordlist)) for word in words], key=itemgetter(1))[0][0]
-        elif extra:
-            #if len(wordlist) < 50 and move == 3:
-            #    next_word = sorted([(score_pair_distribution(word, word2, wordlist), word) for word in words for word2 in (best_1k + wordlist + sample(words, 33))])[0][1]
-            #else:
-                next_word = sorted([(score_hint_distribution(word, wordlist), word) for word in words])[0][1]
-        elif move == 0:
-            #next_word = sorted([(score_pair_distribution(word, word2, wordlist), word) for word in (['irony'] + best_1k + wordlist) for word2 in wordlist])[0][1]
-            if False: #len(wordlist) > 500:
-                #next_word = sorted([(score_pair_distribution2_with_words2(word, word2, wordlist), word) for word in words for word2 in ['irony'] + best_1k + wordlist])[0][1]
-                next_word = sorted([(score_pair_distribution2_with_words2(word, word2, wordlist), word) for word in (['irony'] + best_1k + wordlist) for word2 in wordlist])[0][1]
+        elif move == 1 and lookahead:
+            if by_dscore:
+                next_word = sorted([(dscore_pair_distribution(word, word2, wordlist), word) for word in words for word2 in wordlist])[0][1]
             else:
-                #next_word = sorted([(score_pair_distribution(word, word2, wordlist), word) for word in words for word2 in words])[0][1]
-                next_word = sorted([(score_pair_distribution(word, word2, wordlist), word) for word in (['irony'] + best_1k + wordlist) for word2 in wordlist])[0][1]
-            #next_word = sorted([(score_pair_distribution(word, word2, wordlist), word) for word in words for word2 in wordlist])[0][1]
-            #next_word = sorted([(get_hint_distribution(word, wordlist).most_common(1)[0][1], word) for word in words])[0][1]
+                next_word = sorted([(score_pair_distribution(word, word2, wordlist), word) for word in words for word2 in wordlist])[0][1]
+                #next_word = sorted([(score_pair_distribution(word, word2, wordlist), word) for word in (['irony'] + best_1k + wordlist) for word2 in wordlist])[0][1]
+        elif by_dscore:
+                next_word = sorted([(dscore_hint_distribution(word, wordlist), word) for word in words])[0][1]
         else:
-            if False: #len(wordlist) > 500:
-                next_word = sorted([(score_hint_distribution2_with_words(word, wordlist), word) for word in words])[0][1]
-            else:
-                #next_word = sorted([(get_hint_distribution(word, wordlist).most_common(1)[0][1], word) for word in words])[0][1]
-                next_word = sorted([(score_hint_distribution(word, wordlist), word) for word in words])[0][1]
-        solutions[hint] = compute_all_wordles(next_word, wordlist, move=move+1, history=(history+[bword]), limit=limit)
+            next_word = sorted([(score_hint_distribution(word, wordlist), word) for word in words])[0][1]
+        solutions[hint] = compute_all_wordles(next_word, wordlist, move=move+1, history=(history+[bword]), limit=limit, by_dscore=by_dscore)
         # Oh, lol, I could check-solutions, here, and try all next words... >:D.
         # Or at least, try maybe 10 next words before giving up and going to the next level >:D
+        # -- Oh, lol, I was realizing I might wanna throw brute-force search in!
+        # Well, that's below
     return solutions
 
 # Set up: bwords = official and guesses = full list, so it should always include and be bigger than the official.
-def compute_all_wordles_hard(bword, bwords, guesses=None, move=1, extra=False, lookahead=1, history=[]):
-    solutions = dict()
-    if not guesses:
-        guesses = bwords
-    goals = get_hint_distribution_with_words(bword, bwords)
-    guessdic = get_hint_distribution_with_words(bword, guesses)
-    for hint, wordlist in goals.items():
-        guesslist = guessdic[hint]
-        if len(wordlist) == 1:
-            if bword == wordlist[0]:
-                solutions[hint] = (history + [bword], move)
-                if move > 6:
-                    print(f"Solved {hint}:{wordlist[0]} on move {move} with guesses: {history + [bword]}.")
-            else:
-                solutions[hint] = (history + [bword] + wordlist, move+1)
-                if move > 5:
-                    print(f"Solved {hint}:{wordlist[0]} on move {move+1} with guesses: {history + [bword]}.")
-            continue
-        if move <= lookahead:
-            #next_word = sorted([(score_pair_distribution(word, word2, wordlist), word) for word in wordlist for word2 in wordlist])[0][1]
-            next_word = sorted([(score_pair_distribution(word, word2, wordlist), word) for word in guesslist for word2 in guesslist])[0][1]
-        elif extra:
-            #next_word = sorted([(score_hint_distribution(word, wordlist), word) for word in wordlist])[0][1]
-            next_word = sorted([(score_hint_distribution(word, wordlist), word) for word in guesslist])[0][1]
-        else:
-            #next_word = sorted([(get_hint_distribution(word, wordlist).most_common(1)[0][1], word) for word in wordlist])[0][1]
-            next_word = sorted([(get_hint_distribution(word, wordlist).most_common(1)[0][1], word) for word in guesslist])[0][1]
-        solutions[hint] = compute_all_wordles_hard(next_word, wordlist, guesses=guesslist, move=move+1, lookahead=lookahead, history=(history+[bword]))
-    return solutions
-
+# Meh, just deprecate this.
+#def compute_all_wordles_hard(bword, bwords, guesses=None, move=1, extra=False, lookahead=1, history=[]):
 
 # Calculating the word distributions for starter words.
 #word_distros = dict()
@@ -739,6 +586,18 @@ def compute_all_wordles_hard(bword, bwords, guesses=None, move=1, extra=False, l
 #[(2375.1298951588037, 'lares'), (2403.1796176379894, 'rales'), (2501.012565525748, 'reais'), (2503.9330866481655, 'tares'), (2510.490749306198, 'nares'), (2511.9708603145236, 'aeros'), (2513.8434320074007, 'soare'), (2575.955673758865, 'rates'), (2603.6278137526983, 'arles'), (2653.5081714461917, 'aloes')]
 #>>> sc[-10:]
 #[(48949.254239901325, 'jugum'), (49075.940178846744, 'yukky'), (49280.66057662658, 'bubby'), (49350.35800185014, 'cocco'), (50011.36578785076, 'fuzzy'), (51477.88629355535, 'immix'), (51865.8388066605, 'hyphy'), (53230.85892691952, 'xylyl'), (53373.009019426456, 'gyppy'), (53518.9004008634, 'fuffy')]
+
+# I tried to see if referencing these word distrubions would speed things up.
+# But it didn't because I'm often working with subets of the full words list, which would require additional computations anyway
+#def score_hint_distribution2(word):
+#    return word_distros[word][0].most_common(1)[0][1]
+
+#def get_hint_distribution2(word):
+#    return word_distros[word][1]
+
+###
+# Utility functiosn for dealing with Wordle solution dictionaries
+###
 
 # Checks a solution dictionary to see if it goes over the limit anywhere
 def check_results(solutions, limit=6):
@@ -899,133 +758,8 @@ def get_fails(partial, official_goals_only=False):
 # Relic from when I wanted to selectively try the greedy solution some extra times (without actually brute-forcing)
 #def try_again(fails, partials, base=None, trynum=0, extra=False, official_goals_only=False, history=['salet']):
 
-# Four deterministic solution dictionaries in the 'old' format.  Includes word histories and solution depth info.
-official_solution_full = pickle.load(open("official_goal_solution.pickle", "rb"))
-official_solution_hard_full = pickle.load(open("official_goal_solution_hard.pickle", "rb"))
-swift_solution_full = pickle.load(open("swiftlover6.pickle", 'rb')) # Almost always plays lover second
-swift_solution2_full = pickle.load(open("swiftlover6_2.pickle", 'rb')) # A bit more diversified
-
-# Solution skeletons that just record which move to take for which hint.  Probably recommended.
-official_solution = ast.literal_eval(open('official_goal_solution.pp.txt', 'r').read())
-official_solution_hard = ast.literal_eval(open('official_goal_solution_hard.pp.txt', 'r').read())
-swift_solution = ast.literal_eval(open('swiftlover6.pp.txt', 'r').read())
-swift_solution2 = ast.literal_eval(open('swiftlover62.pp.txt', 'r').read())
-
 # Take one of a wordle assist function where I had to manually keep track of the remaining words and the history 
 #def wordle_assist(guess, hint, remaining_words, move2="", num=3):
-
-# Wordle assistant that tells you how to play according to a solution file.
-# Only works with the 'old' format.
-class OWordle:
-    def __init__(self, dic=None, move=None):
-        self.dic = dic
-        if not move:
-            move = retrieve_first_result(self.dic)[0][0]
-        self.history = [move]
-        print(f"Please play '{move}' for move {len(self.history)}.")
-
-    def move(self, hint):
-        if isinstance(self.dic, tuple):
-            print(f"The game is over.")
-            return self.dic[0][-1]
-        self.dic = self.dic[hint]
-        move_num = len(self.history)
-        next_move = retrieve_first_result(self.dic)[0][move_num]
-        self.history.append(next_move)
-        if isinstance(self.dic, tuple):
-            print(f"You have won with '{next_move}' in {len(self.history)} moves.")
-        else:
-            print(f"Please play '{next_move}' for move {len(self.history)}.")
-        return next_move
-
-# Wordle assistant that tells you how to play according to a skeleton of a solution file.
-class SWordle:
-    def __init__(self, dic=None):
-        move = dic[0]
-        self.dic = dic[1]
-        self.history = [move]
-        print(f"Please play '{move}' for move {len(self.history)}.")
-
-    def move(self, hint):
-        if isinstance(self.dic, str):
-            print(f"The game is over.")
-            return self.dic
-        move_num = len(self.history) + 1
-        next_pair = self.dic[hint]
-        if isinstance(next_pair, str):
-            next_move = next_pair
-            self.dic = None
-            print(f"You have won with '{next_move}' in {move_num} moves.")
-        else:
-            next_move = self.dic[hint][0]
-            self.dic = self.dic[hint][1]
-            print(f"Please play '{next_move}' for move {move_num}.")
-        self.history.append(next_move)
-        return next_move
-
-# Wordle assistant to keep track of the possible goals and move history
-# It recommends 13 moves each round and you can inspect the whole ranking.
-# If you use it's recommendation, you just need to supply the hint.
-class GWordle:
-    def rec(self, hint, move=None):
-        self.move += 1
-        if not move:
-            move = self.next_move
-        self.words = get_hint_distribution_with_words(move, self.words)[hint] 
-        #self.words = get_hint_distribution2_with_words(move, self.words)[hint] 
-        if len(self.words) == 1:
-            next_move = list(self.words)[0]
-            print(f"You will win with '{next_move}' in {self.move + 1} moves.")
-            return next_move 
-        else:
-            self.options = sorted([(score_hint_distribution(word, self.words), word) for word in self.guesses]) 
-            #options = sorted([(score_hint_distribution2_with_words(word, self.words), word) for word in self.guesses]) 
-            to_show = len(self.options) if len(self.options) < 13 else 13
-            print(f"There are {len(self.words)} possible words.  The best {to_show} options are:\n{self.options[:to_show]}.")
-            self.next_move = self.options[0][1]
-            return self.next_move
-
-    # Generates the list of scores for the first move.  May take a while.
-    def init_options(self):
-        if not self.options:
-            self.options = sorted([(score_hint_distribution(word, self.words), word) for word in self.guesses])
-
-    def __init__(self, move=None, hint=None, possible_words=words, possible_guesses=words):
-        self.words = possible_words
-        self.guesses = possible_guesses
-        self.options = None
-        self.move = 0
-        self.next_move = move if move else 'salet'
-        if hint:
-            rec(hint)
-
-    
-
-#x = GWordle()
-#xo = GWordle(possible_words=official_goals)
-#s = SWordle(swift_solution2)
-#ho = OWordle(official_solution_hard)
-
-
-# Uses the Wordle solver class to simulate gameplay for each goal
-# This is a sanity-check to make sure my solution is correct.
-if False:
-    sol = pickle.load(open("swiftlover6.pickle", 'rb')); translate_res_new_to_old(sol)
-    fails = 0
-    for n, goal in enumerate(words):#official_goals):
-        print(f"Word {n} -- {goal}:")
-        word = 'swift'
-        wordle_instance = OWordle(dic=sol, move=word)
-        i = 1
-        while word != goal and i < 7:
-            h = get_hints3(word, goal)
-            word = wordle_instance.move(h)
-            i += 1
-        if i > 6:
-            print(f"FAILED!")
-            fails += 1
-    print(f"\n\nFailed {fails} times.") 
-
 
 # Some good words
 #good_words = ["lurid", "poise", "roast", "caste", "adore", "death", "gymps", "nymph", "fjord", "vibex", "waltz"
@@ -1234,8 +968,6 @@ def brute_force_wordle(bwords, gwords, move=1, history=[], hard=False, limit=69,
             moves[rmove][key] = True
     return best_score, solution
 
-# To my surprise, the .pickle takes 102K memory whereas the .txt takes up 77K.  #Learning
-#zwords = pickle.load(open("zwords.pickle", "rb"))
 
 # Cute, so it can stay.  :- p
 print()
@@ -1340,11 +1072,11 @@ def saveprogress():
 # Also throwing in words that worst/best split the data to 'learn from' first.
 #>>> len(words) / 4
 #3243.0
-inc = int(len(words) / 4)
-words1 = words[:inc]; del words1[words1.index('puppy')]; words1.insert(0, 'puppy'); del words1[words1.index('aider')]; words1.insert(1, 'aider'); del words1[words1.index('crane')]; words1.insert(0, 'crane')
-words2 = words[inc:2*inc]; del words2[words2.index('fuffy')]; words2.insert(0, 'fuffy'); del words2[words2.index('deair')]; words2.insert(1, 'deair')
-words3 = words[2*inc:3*inc]; del words3[words3.index('nunny')]; words3.insert(0, 'nunny'); del words3[words3.index('oared')]; words3.insert(0, 'oared')
-words4 = words[3*inc:4*inc]; del words4[words4.index('yuppy')]; words4.insert(0, 'yuppy'); del words4[words4.index('redia')]; words4.insert(1, 'redia'); del words4[words4.index('salet')]; words4.insert(0, 'salet');
+#inc = int(len(words) / 4)
+#words1 = words[:inc]; del words1[words1.index('puppy')]; words1.insert(0, 'puppy'); del words1[words1.index('aider')]; words1.insert(1, 'aider'); del words1[words1.index('crane')]; words1.insert(0, 'crane')
+#words2 = words[inc:2*inc]; del words2[words2.index('fuffy')]; words2.insert(0, 'fuffy'); del words2[words2.index('deair')]; words2.insert(1, 'deair')
+#words3 = words[2*inc:3*inc]; del words3[words3.index('nunny')]; words3.insert(0, 'nunny'); del words3[words3.index('oared')]; words3.insert(0, 'oared')
+#words4 = words[3*inc:4*inc]; del words4[words4.index('yuppy')]; words4.insert(0, 'yuppy'); del words4[words4.index('redia')]; words4.insert(1, 'redia'); del words4[words4.index('salet')]; words4.insert(0, 'salet');
 
 # Code to try and collect smallish word sets that break each word (which ultimately discovered the winning word: 'swift').
 if False:
@@ -1393,6 +1125,142 @@ if False:
         if not broken:
             solved[word] = (score, indices, best)
         print(f"*** {word} is {'NOT' if not broken else ''} broken!")
+
+
+###
+# Actual solutions and some Wordle Assistant classes that can be played with.
+###
+
+# Four deterministic solution dictionaries in the 'old' format.  Includes word histories and solution depth info.
+official_solution_full = pickle.load(open("solutions/official_goal_solution.pickle", "rb"))
+official_solution_hard_full = pickle.load(open("solutions/official_goal_solution_hard.pickle", "rb"))
+swift_solution_full = pickle.load(open("solutions/swiftlover6.pickle", 'rb')) # Almost always plays lover second
+swift_solution2_full = pickle.load(open("solutions/swiftlover6_2.pickle", 'rb')) # A bit more diversified
+
+# Solution skeletons that just record which move to take for which hint.  Probably recommended.
+official_solution = ast.literal_eval(open('solutions/official_goal_solution.pp.txt', 'r').read())
+official_solution_hard = ast.literal_eval(open('solutions/official_goal_solution_hard.pp.txt', 'r').read())
+swift_solution = ast.literal_eval(open('solutions/swiftlover6.pp.txt', 'r').read())
+swift_solution2 = ast.literal_eval(open('solutions/swiftlover62.pp.txt', 'r').read())
+
+
+# Wordle assistant that tells you how to play according to a solution file.
+# Only works with the 'old' format.
+class OWordle:
+    def __init__(self, dic=None, move=None):
+        self.dic = dic
+        if not move:
+            move = retrieve_first_result(self.dic)[0][0]
+        self.history = [move]
+        print(f"Please play '{move}' for move {len(self.history)}.")
+
+    def move(self, hint):
+        if isinstance(self.dic, tuple):
+            print(f"The game is over.")
+            return self.dic[0][-1]
+        self.dic = self.dic[hint]
+        move_num = len(self.history)
+        next_move = retrieve_first_result(self.dic)[0][move_num]
+        self.history.append(next_move)
+        if isinstance(self.dic, tuple):
+            print(f"You have won with '{next_move}' in {len(self.history)} moves.")
+        else:
+            print(f"Please play '{next_move}' for move {len(self.history)}.")
+        return next_move
+
+# Wordle assistant that tells you how to play according to a skeleton of a solution file.
+class SWordle:
+    def __init__(self, dic=None):
+        move = dic[0]
+        self.dic = dic[1]
+        self.history = [move]
+        print(f"Please play '{move}' for move {len(self.history)}.")
+
+    def move(self, hint):
+        if isinstance(self.dic, str):
+            print(f"The game is over.")
+            return self.dic
+        move_num = len(self.history) + 1
+        next_pair = self.dic[hint]
+        if isinstance(next_pair, str):
+            next_move = next_pair
+            self.dic = None
+            print(f"You have won with '{next_move}' in {move_num} moves.")
+        else:
+            next_move = self.dic[hint][0]
+            self.dic = self.dic[hint][1]
+            print(f"Please play '{next_move}' for move {move_num}.")
+        self.history.append(next_move)
+        return next_move
+
+# Wordle assistant to keep track of the possible goals and move history
+# It recommends 13 moves each round and you can inspect the whole ranking.
+# If you use it's recommendation, you just need to supply the hint.
+class GWordle:
+    def rec(self, hint, move=None):
+        self.move += 1
+        if not move:
+            move = self.next_move
+        self.words = get_hint_distribution_with_words(move, self.words)[hint] 
+        #self.words = get_hint_distribution2_with_words(move, self.words)[hint] 
+        if len(self.words) == 1:
+            next_move = list(self.words)[0]
+            print(f"You will win with '{next_move}' in {self.move + 1} moves.")
+            return next_move 
+        else:
+            self.options = sorted([(score_hint_distribution(word, self.words), word) for word in self.guesses]) 
+            #options = sorted([(score_hint_distribution2_with_words(word, self.words), word) for word in self.guesses]) 
+            to_show = len(self.options) if len(self.options) < 13 else 13
+            print(f"There are {len(self.words)} possible words.  The best {to_show} options are:\n{self.options[:to_show]}.")
+            self.next_move = self.options[0][1]
+            return self.next_move
+
+    # Generates the list of scores for the first move.  May take a while.
+    def init_options(self):
+        if not self.options:
+            self.options = sorted([(score_hint_distribution(word, self.words), word) for word in self.guesses])
+
+    def get_options_dic(self):
+        return dict( (word, score) for score, word in self.options )
+
+    def __init__(self, move=None, hint=None, possible_words=words, possible_guesses=words):
+        self.words = possible_words
+        self.guesses = possible_guesses
+        self.options = None
+        self.move = 0
+        self.next_move = move if move else 'salet'
+        if hint:
+            rec(hint)
+
+#x = GWordle()
+xo = GWordle(possible_words=official_goals)
+#s = SWordle(swift_solution2)
+#ho = OWordle(official_solution_hard)
+
+
+# Uses the Wordle solver class to simulate gameplay for each goal
+# This is a sanity-check to make sure my solution is correct.
+if False:
+    sol = pickle.load(open("swiftlover6.pickle", 'rb'))
+    fails = 0
+    for n, goal in enumerate(words):#official_goals):
+        print(f"Word {n} -- {goal}:")
+        word = 'swift'
+        wordle_instance = OWordle(dic=sol, move=word)
+        i = 1
+        while word != goal and i < 7:
+            h = get_hints3(word, goal)
+            word = wordle_instance.move(h)
+            i += 1
+        if i > 6:
+            print(f"FAILED!")
+            fails += 1
+    print(f"\n\nFailed {fails} times.") 
+
+
+
+
+
 
 # I'll end the file with present Zar's mettic wish.
 
