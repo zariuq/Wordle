@@ -14,6 +14,9 @@ One caveat is that "myrrh" doesn't enter the official word list.  For more detai
 ---
 
 Included are some Wordle assistant classes:
+
+I suggest running with:
+\> python -i words.py
   
 SWordle parses a skeletal solution (\*.pp.txt) and OWordle parses a 'full' solution (\*.pickle) for you if you want a guaranteed 'win' (assuming new 5-letter words aren't added to the 12,972 currently allowed for guessing).
   
