@@ -1223,6 +1223,9 @@ class GWordle:
     def get_options_dic(self):
         return dict( (word, score) for score, word in self.options )
 
+    def goal_ranks(self):
+        return [(word, score) for score, word in self.options if word in self.words]
+
     def __init__(self, move=None, hint=None, possible_words=words, possible_guesses=words):
         self.words = possible_words
         self.guesses = possible_guesses

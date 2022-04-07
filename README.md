@@ -59,3 +59,7 @@ swiftlover6\_all\_plays.txt -- Simulated plays for each goal.
  
 words.py -- The main code.  The interactive content is near the end of the file.  
 
+I interactively use the classis via:
+
+\>python -i words.py
+
