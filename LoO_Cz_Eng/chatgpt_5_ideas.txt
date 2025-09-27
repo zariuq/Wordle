@@ -1,0 +1,127 @@
+# CZ–EN Interleaver (Ra Contact) — Working Notes & Spec
+
+**Goal:** produce per-session, **per-question** interleaved text files:
+S.Q<TAB>CS<TAB>czech_text
+S.Q<TAB>EN<TAB>english_text
+
+pgsql
+Copy code
+S = session number; Q = question number. Output is in numeric order with **CZ then EN** for each `S.Q`.
+
+---
+
+## Why the simple parsers failed
+
+1. On the EN side, many sessions **embed `1.1`, `1.2`, … inside the big `1.0 (EN)` block** (the prologue). A header-only parser misses them. Session 1 clearly shows “…requesting. **1.1 Questioner** … 1.2 Questioner …” inline under `1.0 (EN)`. :contentReference[oaicite:0]{index=0}
+2. Fake “empty” headers exist (e.g., `1.1 (EN)` with no body). If you prefer longest-text-wins, these empty stubs must **never** overwrite real text found inline.
+3. Tokenization gotcha: `1.1` inside `1.10`. Use a regex that **does not** match `1.1` when followed by another digit.
+4. Noise: both sites append large **footers/sidebars** (“Watch video”, “Glossary”, “Rychlé odkazy”, etc.) that must be dropped. They appear right after the real content in many dumps. :contentReference[oaicite:1]{index=1}
+5. Odd numbering artifacts (e.g., `1 . 7` with spaces) also occur and should still parse as `1.7`. :contentReference[oaicite:2]{index=2}
+
+---
+
+## Acceptance criteria (definition of done)
+
+- For **Session 001**, the output **MUST** include non-empty rows for `1.1 EN` and `1.2 EN`. (They live inside `1.0 (EN)` in the source.) :contentReference[oaicite:3]{index=3}
+- For every `S.Q` that exists in either language, emit **two lines** (CZ then EN) with the available text; if one language is truly missing, keep the field empty (but do not invent or duplicate).
+- Output contains **only** question lines—no session prologues, no site footers.
+
+---
+
+## Parser spec (robust and deterministic)
+
+**Explicit block header (multiline):**
+^\s*(\d{1,3})\s*.\s*(\d{1,3})\s*
+(
+𝐶
+𝑆
+∣
+𝐸
+𝑁
+)
+(CS∣EN)\s*(.*)$
+
+scss
+Copy code
+
+**Implicit in-block question tokens (don’t match 1.1 inside 1.10):**
+(?<!\d)(\d{1,3})\s*.\s*(\d{1,3})(?!\d)
+
+markdown
+Copy code
+
+**Algorithm:**
+1. Scan explicit headers to get language **blocks** (`S.Q (CS|EN)`). For each block, also include its trailing text up to the next header.
+2. **Within each block**, split on the implicit `S.Q` tokens (the crucial step to recover EN 1.1/1.2/… embedded in `1.0 (EN)`).
+3. **Language detection override:** start with declared block language; if the slice looks Czech (diacritics or “Tazatel”/“Já jsem”), force `CS`; if it looks English (“Questioner”, “I am Ra”), force `EN`.
+4. **Merge policy:** for each `(S.Q, lang)`, keep the **longest** slice seen (prevents empty/short stubs overwriting a good inline chunk).
+5. **Sanitize:** trim whitespace; drop lines containing any of these tokens:
+rychlé odkazy, sociální sítě, o nás, šablona webu, nastavení cookies, ©,
+watch video, listen, original audio recordings, glossary, unusual words,
+entities, places, protection rituals, resource series, amazon kindle,
+audiobook, youtube, facebook, instagram, read time
+
+markdown
+Copy code
+
+**CLI shape:**
+ra_interleave.py IN_DIR OUT_DIR
+
+writes OUT_DIR/session_###_interleaved.tsv
+and OUT_DIR/session_###_audit.json (list of missing halves)
+markdown
+Copy code
+
+---
+
+## Known edge cases (from our samples)
+
+- Session 1 EN contains long inline text under `1.0 (EN)` followed by repeated “Watch video / Glossary …” footers; ignore those. :contentReference[oaicite:4]{index=4}
+- Spaced tokens like `1 . 7` should still be recognized as `1.7`. :contentReference[oaicite:5]{index=5}
+
+---
+
+## How we got here (summary of attempts)
+
+- **Header-only split** → missed EN 1.1/1.2 because they’re embedded under `1.0 (EN)`; flagged as “missing” even though the text is present. :contentReference[oaicite:6]{index=6}
+- **Naïve token regex `\d+\.\d+`** → mis-parsed `1.10` as `1.1`.  
+- **Fixes** → in-block splitting, negative look-ahead/behind in regex, longest-text-wins merge, and a small language heuristic.
+
+---
+
+## What Codex should deliver
+
+- A single-file script `interleave/ra_interleave.py` (stdlib only) with:
+  - `parse_session_file(path) -> (session_number, buckets)`
+  - `write_tsv(...)`, `write_audit(...)`
+  - `main()` to drive the CLI above
+- A tiny test `interleave/tests_demo.py` that builds a **fixture** where `1.0 (EN)` contains `1.1` and `1.2` inline and asserts that:
+  - `buckets["1.1"]["en"]` and `buckets["1.2"]["en"]` are non-empty,
+  - `buckets["1.1"]["cs"]` and `buckets["1.2"]["cs"]` are non-empty,
+  - the token regex does **not** misread `1.1` inside `1.10`.
+
+## How to run (after Codex implements)
+```bash
+python interleave/ra_interleave.py data/LoO_sessions out_interleaved
+# optional sanity:
+pytest -q interleave/tests_demo.py
+perl
+Copy code
+
+---
+
+## 4) A tight “brief” you can hand Codex (save as `interleave/CODEX_BRIEF.md`)
+
+> **Build a robust CZ–EN interleaver for “Ra Contact” session dumps.**  
+> Requirements, edge cases, and acceptance tests are in `docs/INTERLEAVE_README.md`.  
+> Key points: split **inside** language blocks; regex must not match `1.1` inside `1.10`; use longest-text-wins; drop footer noise; enforce a strict TSV output (CZ then EN per `S.Q`).  
+> **Acceptance:** Session 001 must output non-empty `1.1 EN` and `1.2 EN` (they are inline under `1.0 (EN)` in the source). :contentReference[oaicite:7]{index=7}  
+> Deliver `interleave/ra_interleave.py` and `interleave/tests_demo.py` (no external deps).
+
+---
+
+### Why we’re confident this will work now
+
+You’ve already confirmed the inline **`1.1 Questioner …`** is present under `1.0 (EN)` in your source files; the spec above forces Codex to split inside that block and to **keep** those slices even if empty `1.1 (EN)` stubs appear later. The README also calls out footer noise and the `1.1` vs `1.10` trap, so Codex has no wiggle room to regress. The acceptance test locks this in using a minimal fixture based on the pattern visible in **Session 1**. :contentReference[oaicite:8]{index=8}
+
+If you want, I can also add a tiny `Makefile` target (`make interleave`) and a `--trace` flag so your script logs which block each `S.Q lang` came from—handy when reviewing PRs.
