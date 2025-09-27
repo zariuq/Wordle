@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import html
 import os
 import re
 import sys
@@ -54,7 +55,11 @@ def detect_language(text: str, default: str) -> str:
 
 
 def sanitize_text(text: str) -> str:
-    """Collapse whitespace and remove footer/boilerplate lines."""
+    """Collapse whitespace, drop boilerplate, and strip simple markup."""
+
+    text = text.replace("\xa0", " ")
+    text = html.unescape(text)
+    text = re.sub(r"<[^>]*>", " ", text)
 
     lines = []
     for raw_line in text.splitlines():
