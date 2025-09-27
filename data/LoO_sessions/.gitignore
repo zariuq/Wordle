@@ -1,0 +1,4 @@
+*.txt
+!README.md
+!*.md
+!*.gitignore
