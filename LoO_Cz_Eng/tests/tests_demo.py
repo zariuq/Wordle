@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
+import sys
 import textwrap
+from pathlib import Path
 
-from interleave.ra_interleave import parse_session_file
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from LoO_Cz_Eng.interleave.ra_interleave import parse_session_file
 
 
 def test_parse_session(tmp_path):

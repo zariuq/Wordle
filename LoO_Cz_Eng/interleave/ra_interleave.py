@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Dict, Tuple
 
 HEADER_RE = re.compile(r"^\s*(\d{1,3})\s*\.\s*(\d{1,3})\s*\((CS|EN)\)\s*(.*)$", re.IGNORECASE)
-IMPLICIT_TOKEN_RE = re.compile(r"(?<!\d)(\d{1,3})\s*\.\s*(\d{1,3})(?!\d)")
+IMPLICIT_TOKEN_RE = re.compile(r"(?<!\d)(\d{1,3})\s*[\.\u00B7]\s*(\d{1,3})(?!\d)")
 FOOTER_KEYWORDS = [
     "rychlé odkazy",
     "sociální sítě",
@@ -57,22 +57,28 @@ def detect_language(text: str, default: str) -> str:
 def sanitize_text(text: str) -> str:
     """Collapse whitespace, drop boilerplate, and strip simple markup."""
 
-    text = text.replace("\xa0", " ")
     text = html.unescape(text)
+    text = text.replace("\xa0", " ")
     text = re.sub(r"<[^>]*>", " ", text)
+
+    for keyword in FOOTER_KEYWORDS:
+        text = re.sub(re.escape(keyword), " ", text, flags=re.IGNORECASE)
 
     lines = []
     for raw_line in text.splitlines():
         stripped = raw_line.strip()
         if not stripped:
             continue
-        lowered = stripped.casefold()
-        if any(keyword in lowered for keyword in FOOTER_KEYWORDS):
-            continue
         lines.append(stripped)
     cleaned = " ".join(lines)
     cleaned = re.sub(r"\s+", " ", cleaned).strip()
     return cleaned
+
+
+def _normalise_for_tokenisation(text: str) -> str:
+    text = html.unescape(text)
+    text = text.replace("\xa0", " ")
+    return re.sub(r"<[^>]*>", " ", text)
 
 
 def parse_session_file(path: os.PathLike[str] | str) -> Tuple[int, Dict[str, Dict[str, str]]]:
@@ -119,6 +125,7 @@ def parse_session_file(path: os.PathLike[str] | str) -> Tuple[int, Dict[str, Dic
         if not text:
             continue
 
+        text = _normalise_for_tokenisation(text)
         last_index = 0
         current_sq = base_sq
         for match in IMPLICIT_TOKEN_RE.finditer(text):
@@ -128,7 +135,7 @@ def parse_session_file(path: os.PathLike[str] | str) -> Tuple[int, Dict[str, Dic
                 _store_slice(slice_text, current_sq, default_lang, buckets)
             current_sq = f"{int(match.group(1))}.{int(match.group(2))}"
             last_index = match.end()
-        if last_index <= len(text):
+        if last_index < len(text):
             slice_text = text[last_index:]
             _store_slice(slice_text, current_sq, default_lang, buckets)
 
