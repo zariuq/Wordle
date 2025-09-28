@@ -10,14 +10,14 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from LoO_Cz_Eng.interleave.ra_interleave import parse_session_file
+from LoO_Cz_Eng.interleave.ra_interleave import parse_session_file, sanitize_text
 
 
 def test_parse_session(tmp_path):
     content = textwrap.dedent(
         """
         999.0 (EN) Ra introduction 1.1 Questioner What is the plan? 1.2 Questioner Please continue. 1.10 This should stay together.
-        1.1 (CS) Tazatel: Jaký je plán?
+        1.1 (CS) Tazatel: Jaký je plán?[1]
         1.2 (CS) Tazatel: Prosím, pokračujte.
         """
     ).strip()
@@ -32,6 +32,7 @@ def test_parse_session(tmp_path):
     assert buckets["1.1"]["en"]
     assert buckets["1.2"]["en"]
     assert buckets["1.1"]["cs"]
+    assert "[" not in buckets["1.1"]["cs"]
     assert buckets["1.2"]["cs"]
     assert "stay together" in buckets["1.10"]["en"]
 
@@ -54,3 +55,19 @@ def test_embedded_language_slices(tmp_path):
     assert "Thank you" in buckets["1.2"]["en"]
     assert buckets["1.1"]["cs"].startswith("Tazatel")
     assert buckets["1.2"]["cs"].startswith("Tazatel")
+
+
+def test_sanitize_text_handles_mojibake_and_boilerplate():
+    raw = (
+        "Jim writes: This should disappear.\n"
+        "Watch the recording later.\n"
+        "Questioner \u00e2\u0080\u0094 how are you? [12]\n"
+        "We are well."
+    )
+
+    cleaned = sanitize_text(raw)
+
+    assert cleaned.startswith("Questioner — how are you?")
+    assert "Jim writes" not in cleaned
+    assert "Watch the recording" not in cleaned
+    assert "[12]" not in cleaned

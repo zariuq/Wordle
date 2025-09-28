@@ -12,33 +12,71 @@ from pathlib import Path
 from typing import Dict, Tuple
 
 HEADER_RE = re.compile(r"^\s*(\d{1,3})\s*\.\s*(\d{1,3})\s*\((CS|EN)\)\s*(.*)$", re.IGNORECASE)
-IMPLICIT_TOKEN_RE = re.compile(r"(?<!\d)(\d{1,3})\s*[\.\u00B7]\s*(\d{1,3})(?!\d)")
-FOOTER_KEYWORDS = [
-    "rychlé odkazy",
-    "sociální sítě",
-    "o nás",
-    "šablona webu",
-    "nastavení cookies",
-    "©",
-    "watch video",
-    "listen",
-    "original audio recordings",
-    "glossary",
-    "unusual words",
-    "entities",
-    "places",
-    "protection rituals",
-    "resource series",
-    "amazon kindle",
-    "audiobook",
-    "youtube",
-    "facebook",
-    "instagram",
-    "read time",
+IMPLICIT_TOKEN_RE = re.compile(r"(?<!\d)(\d{1,3})\s*[\.\u00A0\u00B7]\s*(\d{1,3})(?!\d)")
+
+MOJIBAKE_MAP = {
+    "\u00e2\u0080\u0099": "\u2019",
+    "\u00e2\u0080\u0098": "\u2018",
+    "\u00e2\u0080\u009c": "\u201c",
+    "\u00e2\u0080\u009d": "\u201d",
+    "\u00e2\u0080\u0094": "\u2014",
+    "\u00e2\u0080\u0093": "\u2013",
+    "\u00e2\u0080\u00a6": "\u2026",
+    "\u00e2\u0080\u00a2": "\u2022",
+    "\u00e2\u0080\u00a0": "\u2020",
+    "\u00e2\u0080\u00a1": "\u2021",
+    "\u00c3\u00af": "\u00ef",
+    "\u00c3\u00a9": "\u00e9",
+    "\u00c3\u00a8": "\u00e8",
+    "\u00c2 ": " ",
+}
+
+BOILERPLATE_PATTERNS = [
+    r"^\s*(Watch the recording|Original audio recordings)\b",
+    r"^\s*(Interpretative Resources|Frequently used words|Glossary)\b",
+    r"^\s*Book Open\b",
+    r"^\s*MB Book Open\b",
+    r"^\s*(Our History|Team)\b",
+    r"^\s*(←|→)\s*P(?:ředchozí|revious)\s+relace\b",
+    r"Themefisher",
+    r"Zákon jednoty, Vojtech Schlesinger",
+    r"Čeština na lawofone\.info",
+    r"youtube|facebook|instagram",
+    r"Printed books L/L Research",
+    r"Online Store",
+    r"Amazon Kindle",
+    r"Buy the eBook",
+    r"Audiobook",
+    r"Listen on Audible",
+    r"MOBI Version",
+    r"EPUB Version",
+    r"^\s*Research\.?$",
+    r"^\s*In this context,",
+    r"^\s*Jim (writes|píše):",
 ]
+
+TAIL_PATTERNS = [
+    r"In this context",
+    r"Jim (writes|píše):",
+    r"\bO\s+nás\b",
+    r"Staráme se o český překlad",
+    r"channelingové komunikace s Ra",
+    r"jsme satelitní organizací",
+    r"L/L Research",
+    r"Research\.",
+]
+
+FOOTNOTE_TOKEN = re.compile(r"\[(\d{1,3})\]")
+LEADING_PUNCT = re.compile(r"^([0-9]{1,3}\.[0-9]{1,3})\t[.\s]+")
 
 CS_KEYWORDS = ["tazatel", "já jsem", "vážíme si", "nástroj"]
 EN_KEYWORDS = ["questioner", "i am", "we appreciate", "instrument"]
+
+
+def _fix_mojibake(text: str) -> str:
+    for bad, good in MOJIBAKE_MAP.items():
+        text = text.replace(bad, good)
+    return text
 
 
 def detect_language(text: str, default: str) -> str:
@@ -59,18 +97,32 @@ def sanitize_text(text: str) -> str:
 
     text = html.unescape(text)
     text = text.replace("\xa0", " ")
+    text = _fix_mojibake(text)
     text = re.sub(r"<[^>]*>", " ", text)
 
-    for keyword in FOOTER_KEYWORDS:
-        text = re.sub(re.escape(keyword), " ", text, flags=re.IGNORECASE)
-
-    lines = []
+    kept_lines = []
     for raw_line in text.splitlines():
-        stripped = raw_line.strip()
-        if not stripped:
+        line = raw_line.strip()
+        if not line:
             continue
-        lines.append(stripped)
-    cleaned = " ".join(lines)
+        if any(
+            re.search(pattern, line, re.IGNORECASE | re.MULTILINE)
+            for pattern in BOILERPLATE_PATTERNS
+        ):
+            continue
+        for pattern in TAIL_PATTERNS:
+            match = re.search(pattern, line, re.IGNORECASE)
+            if match:
+                line = line[: match.start()].strip()
+        if not line:
+            continue
+        kept_lines.append(line)
+
+    if not kept_lines:
+        return ""
+
+    cleaned = " ".join(kept_lines)
+    cleaned = FOOTNOTE_TOKEN.sub("", cleaned)
     cleaned = re.sub(r"\s+", " ", cleaned).strip()
     return cleaned
 
@@ -78,7 +130,22 @@ def sanitize_text(text: str) -> str:
 def _normalise_for_tokenisation(text: str) -> str:
     text = html.unescape(text)
     text = text.replace("\xa0", " ")
+    text = _fix_mojibake(text)
     return re.sub(r"<[^>]*>", " ", text)
+
+
+def _should_skip_token(text: str, start: int, end: int) -> bool:
+    i = start - 1
+    while i >= 0 and text[i].isspace():
+        i -= 1
+    if i >= 0 and text[i] in "[(":
+        return True
+
+    j = end
+    n = len(text)
+    while j < n and text[j].isspace():
+        j += 1
+    return j < n and text[j] in "-–—]/.,;:"
 
 
 def parse_session_file(path: os.PathLike[str] | str) -> Tuple[int, Dict[str, Dict[str, str]]]:
@@ -129,6 +196,8 @@ def parse_session_file(path: os.PathLike[str] | str) -> Tuple[int, Dict[str, Dic
         last_index = 0
         current_sq = base_sq
         for match in IMPLICIT_TOKEN_RE.finditer(text):
+            if _should_skip_token(text, match.start(), match.end()):
+                continue
             start = match.start()
             if start > last_index:
                 slice_text = text[last_index:start]
@@ -169,19 +238,34 @@ def write_interleaved(buckets: Dict[str, Dict[str, str]], out_path: os.PathLike[
             cs_text = texts.get("cs", "").strip()
             en_text = texts.get("en", "").strip()
             if cs_text:
-                handle.write(f"{sq}\t{cs_text}\n")
+                line = f"{sq}\t{cs_text}"
+                line = LEADING_PUNCT.sub(r"\1\t", line)
+                handle.write(f"{line}\n")
             if en_text:
-                handle.write(f"{sq}\t{en_text}\n")
+                line = f"{sq}\t{en_text}"
+                line = LEADING_PUNCT.sub(r"\1\t", line)
+                handle.write(f"{line}\n")
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Interleave Czech and English Ra Contact sessions.")
-    parser.add_argument("input_dir", type=Path, help="Directory containing session_###_cs_en.txt files")
-    parser.add_argument("output_dir", type=Path, help="Directory where interleaved files will be written")
+    parser.add_argument(
+        "input_dir",
+        nargs="?",
+        type=Path,
+        help="Directory containing session_###_cs_en.txt files",
+    )
+    parser.add_argument(
+        "output_dir",
+        nargs="?",
+        type=Path,
+        help="Directory where interleaved files will be written",
+    )
     args = parser.parse_args(argv)
 
-    input_dir = args.input_dir
-    output_dir = args.output_dir
+    root = Path(__file__).resolve().parents[1]
+    input_dir = args.input_dir or root / "data" / "LoO_sessions"
+    output_dir = args.output_dir or root / "out_interleaved"
 
     if not input_dir.is_dir():
         parser.error(f"Input directory does not exist: {input_dir}")
